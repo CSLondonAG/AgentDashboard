@@ -269,7 +269,7 @@ adherence_data_available = not df_agent_day.empty
 # --- Conditional display logic based on shift schedule and adherence data ---
 if sched == "Not Assigned":
     # Case 1: No shift scheduled for the agent
-    st.image(""day_off.png", caption="No Shift Scheduled for this Day", width=300)
+    st.image("day_off.png", caption="No Shift Scheduled for this Day", width=300)
     st.info("Please select another agent or date, or ensure a shift is assigned.")
 elif not adherence_data_available:
     # Case 2: Shift scheduled, but no adherence data available (agent absent)
