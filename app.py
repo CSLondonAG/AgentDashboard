@@ -182,7 +182,7 @@ raw_dates = sorted(
     key=lambda d: datetime.strptime(d, "%d/%m/%Y")
 )
 dates = [datetime.strptime(d, "%d/%m/%Y") for d in raw_dates]
-date = st.sidebar.selectbox("Date", dates)
+date = st.sidebar.date_input("Date", min_value=min(dates), max_value=max(dates), value=max(dates))
 
 def parse_time(val):
     if pd.isna(val): return None
@@ -325,7 +325,7 @@ else:
 
     df_day_items = df_items[
         (df_items["User: Full Name"] == agent) &
-        (df_items["Start DT"].dt.date == date.date())
+        (df_items["Start DT"].dt.date == date)
     ].copy()
 
     df_day_items["Duration"] = (df_day_items["End Dt"] - df_day_items["Start DT"]).dt.total_seconds()
@@ -447,7 +447,7 @@ else:
 
         df_day_late_check = df_presence[
             (df_presence["Created By: Full Name"] == agent) &
-            (df_presence["Start DT"].dt.date == d.date())
+            (df_presence["Start DT"].dt.date == d)
         ]
 
         if not df_day_late_check.empty and sched_shift:
