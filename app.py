@@ -269,11 +269,11 @@ adherence_data_available = not df_agent_day.empty
 # --- Conditional display logic based on shift schedule and adherence data ---
 if sched == "Not Assigned":
     # Case 1: No shift scheduled for the agent
-    st.image("C:\\Users\\adamg\\agent_dashboard\\day_off.png", caption="No Shift Scheduled for this Day", width=300)
+    st.image(""day_off.png", caption="No Shift Scheduled for this Day", width=300)
     st.info("Please select another agent or date, or ensure a shift is assigned.")
 elif not adherence_data_available:
     # Case 2: Shift scheduled, but no adherence data available (agent absent)
-    st.image("C:\\Users\\adamg\\agent_dashboard\\absent.png", caption="Agent was Absent or No Adherence Data Found for this Day", width=300)
+    st.image(""absence.png", caption="Agent was Absent or No Adherence Data Found for this Day", width=300)
     st.warning("No adherence data found for the scheduled shift. This may indicate absence.")
 else:
     # Case 3: Shift scheduled and adherence data is available - display full dashboard
@@ -461,7 +461,7 @@ else:
 
     # Conditional display based on whether any lateness incidents were found
     if not lateness_incidents:
-        st.image("C:\\Users\\adamg\\agent_dashboard\\no_late.png", caption="No Lateness Incidents Recorded", width=300)
+        st.image("no_late.png", caption="No Lateness Incidents Recorded", width=300)
     else:
         # Display the overall total lateness metric
         st.markdown(f"""
