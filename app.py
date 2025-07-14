@@ -270,11 +270,11 @@ adherence_data_available = not df_agent_day.empty
 if sched == "Not Assigned":
     # Case 1: No shift scheduled for the agent
     st.image("day_off.png", caption="No Shift Scheduled for this Day", width=300)
-    st.info("Please select another agent or date, or ensure a shift is assigned.")
+    st.info("You were not scheduled to work on this day")
 elif not adherence_data_available:
     # Case 2: Shift scheduled, but no adherence data available (agent absent)
-    st.image("absence.png", caption="Agent was Absent or No Adherence Data Found for this Day", width=300)
-    st.warning("No adherence data found for the scheduled shift. This may indicate absence.")
+    st.image("absent.png", caption="You were Absent from your scheduled shift on this day", width=300)
+    
 else:
     # Case 3: Shift scheduled and adherence data is available - display full dashboard
     earliest = df_agent_day["Start DT"].min()
