@@ -3,9 +3,6 @@ import pandas as pd
 
 # --- Load All Data Freshly on Each Run ---
 
-# Adherence: no parse_dates needed, dates are column headers
-df_adherence = pd.read_csv("adherence.csv")
-
 # Presence: parse known datetime columns
 df_presence = pd.read_csv("report_presence.csv", parse_dates=["Start DT", "End DT"])
 
@@ -151,13 +148,11 @@ st.markdown("""
 def load_data():
     df_items = pd.read_csv("report_items.csv", dayfirst=True)
     df_items["Start DT"] = pd.to_datetime(df_items["Start DT"], dayfirst=True, errors="coerce")
-    df_items["End Dt"] = pd.to_datetime(df_items["End DT"], dayfirst=True, errors="coerce")
+    df_items["End DT"] = pd.to_datetime(df_items["End DT"], dayfirst=True, errors="coerce")
 
     df_presence = pd.read_csv("report_presence.csv", dayfirst=True)
     df_presence["Start DT"] = pd.to_datetime(df_presence["Start DT"], dayfirst=True, errors="coerce")
     df_presence["End DT"] = pd.to_datetime(df_presence["End DT"], dayfirst=True, errors="coerce")
-
-    df_adherence = pd.read_csv("adherence.csv", dayfirst=True)
 
     df_shifts = pd.read_csv("shifts.csv")
     df_shifts.rename(columns={"Column1": "Agent Name"}, inplace=True)
@@ -167,21 +162,21 @@ def load_data():
     df_items["Service Channel: Developer Name"] = df_items["Service Channel: Developer Name"].str.strip()
     df_presence["Created By: Full Name"] = df_presence["Created By: Full Name"].str.strip()
     df_presence["Service Presence Status: Developer Name"] = df_presence["Service Presence Status: Developer Name"].str.strip()
-    df_adherence["Agent Name"] = df_adherence["Agent Name"].str.strip()
 
-    return df_items, df_presence, df_adherence, df_shifts
+    return df_items, df_presence, df_shifts
 
-df_items, df_presence, df_adherence, df_shifts = load_data()
+df_items, df_presence, df_shifts = load_data()
 
-agents = sorted(df_adherence["Agent Name"].dropna().unique())
+agents = sorted(df_presence["Created By: Full Name"].dropna().unique())
 st.sidebar.header("Select Agent and Date")
 agent = st.sidebar.selectbox("Agent Name", agents)
 
 raw_dates = sorted(
-    {h.split()[0] for h in df_adherence.columns if "/" in h},
-    key=lambda d: datetime.strptime(d, "%d/%m/%Y")
+    df_presence["Start DT"].dt.date.unique()
 )
-dates = [datetime.strptime(d, "%d/%m/%Y") for d in raw_dates]
+dates = sorted([pd.to_datetime(d).date() for d in raw_dates])
+
+dates = sorted(raw_dates)
 date = st.sidebar.date_input("Date", min_value=min(dates), max_value=max(dates), value=max(dates))
 
 def parse_time(val):
@@ -228,21 +223,6 @@ def format_seconds_to_mm_ss(total_seconds):
     seconds = int(total_seconds % 60)
     return f"{minutes:02d}:{seconds:02d}"
 
-
-key = lambda lbl: f"{date.strftime('%d/%m/%Y')} {lbl}"
-row_a = df_adherence[df_adherence["Agent Name"] == agent]
-
-lunch_raw = row_a.get(key("Lunch Time")).iat[0] if key("Lunch Time") in row_a.columns else None
-shift_raw = row_a.get(key("Total Shift Time")).iat[0] if key("Total Shift Time") in row_a.columns else None
-
-lunch = parse_time(lunch_raw)
-shiftl = parse_td(shift_raw)
-
-shift_col = date.strftime("%d/%m/%Y")
-sched_row = df_shifts[df_shifts["Agent Name"].str.lower() == agent.lower()]
-sched_val = sched_row[shift_col].values[0] if shift_col in df_shifts.columns and not sched_row.empty else None
-sched = str(sched_val).strip() if pd.notna(sched_val) else "Not Assigned"
-
 # --- Common header section (Agent Dashboard Title and Date) - Always displayed at the top ---
 st.markdown(f"""
     <div class="custom-main-header-container">
@@ -256,7 +236,12 @@ st.markdown(
 )
 st.markdown("---") # Visual separator
 
-# Determine adherence data presence for the selected day
+# --- Determine the scheduled shift (sched) and adherence data presence early ---
+shift_col = date.strftime("%d/%m/%Y")
+sched_row = df_shifts[df_shifts["Agent Name"].str.lower() == agent.lower()]
+sched_val = sched_row[shift_col].values[0] if shift_col in df_shifts.columns and not sched_row.empty else None
+sched = str(sched_val).strip() if pd.notna(sched_val) else "Not Assigned"
+
 start_dt = datetime.combine(date, dtime(0, 0))
 end_dt = datetime.combine(date, dtime(23, 59))
 df_agent_day = df_presence[
@@ -279,9 +264,9 @@ else:
     # Case 3: Shift scheduled and adherence data is available - display full dashboard
     earliest = df_agent_day["Start DT"].min()
     latest = df_agent_day["End DT"].max()
-    sched_adherence = f"{earliest.strftime('%H:%M')} – {latest.strftime('%H:%M')}"
+    sched_adherence = f"{earliest.strftime('%I:%M %p')} – {latest.strftime('%I:%M %p')}"
 
-    minutes = pd.date_range(start=start_dt, end=end_dt, freq="T", inclusive="left")
+    minutes = pd.date_range(start=start_dt, end=end_dt, freq="min", inclusive="left")
     num_avail_chat = num_handled_chat = 0
     num_avail_email = num_handled_email = 0
 
@@ -300,7 +285,7 @@ else:
                 (df_items["User: Full Name"] == agent) &
                 (df_items["Service Channel: Developer Name"] == "sfdc_liveagent") &
                 (df_items["Start DT"] <= t) &
-                (df_items["End Dt"] > t)
+                (df_items["End DT"] > t)
             ]
             if not its.empty:
                 num_handled_chat += 1
@@ -311,7 +296,7 @@ else:
                 (df_items["User: Full Name"] == agent) &
                 (df_items["Service Channel: Developer Name"] == "casesChannel") &
                 (df_items["Start DT"] <= t) &
-                (df_items["End Dt"] > t)
+                (df_items["End DT"] > t)
             ]
             if not its_e.empty:
                 num_handled_email += 1
@@ -328,7 +313,7 @@ else:
         (df_items["Start DT"].dt.date == date)
     ].copy()
 
-    df_day_items["Duration"] = (df_day_items["End Dt"] - df_day_items["Start DT"]).dt.total_seconds()
+    df_day_items["Duration"] = (df_day_items["End DT"] - df_day_items["Start DT"]).dt.total_seconds()
 
     chat_items = df_day_items[df_day_items["Service Channel: Developer Name"] == "sfdc_liveagent"]
     email_items = df_day_items[df_day_items["Service Channel: Developer Name"] == "casesChannel"]
@@ -413,18 +398,52 @@ else:
     # Lunch and Total Shift Time (Daily Overview)
     st.markdown("### Daily Overview")
     col3, col4 = st.columns(2)
+
+    # Calculate Lunch Time
+    # We’ll derive this as the start time of the first Break_Lunch status entry for the selected agent on the selected date.
+    # Filter presence data for the selected agent and date again for clarity within this block
+    agent_daily_presence_filtered = df_presence[
+        (df_presence['Created By: Full Name'] == agent) &
+        (df_presence['Start DT'].dt.date == date)
+    ].copy()
+
+    lunch_time_entry = agent_daily_presence_filtered[
+        agent_daily_presence_filtered['Service Presence Status: Developer Name'] == 'Busy_Lunch'
+    ].sort_values(by='Start DT').iloc[0] if not agent_daily_presence_filtered[
+        agent_daily_presence_filtered['Service Presence Status: Developer Name'] == 'Busy_Lunch'
+    ].empty else None
+
+    lunch_start_time = lunch_time_entry['Start DT'].strftime('%H:%M') if lunch_time_entry is not None else "N/A"
+
+    # Calculate Total Shift Time
+    # (End of last presence segment) – (Start of first presence segment)
+    # For the selected agent and date.
+    if not agent_daily_presence_filtered.empty:
+        first_segment_start = agent_daily_presence_filtered['Start DT'].min()
+        last_segment_end = agent_daily_presence_filtered['End DT'].max()
+        total_shift_duration = last_segment_end - first_segment_start
+        
+        # Convert total_shift_duration to hh:mm format
+        total_seconds = total_shift_duration.total_seconds()
+        hours = int(total_seconds // 3600)
+        minutes = int((total_seconds % 3600) // 60)
+        total_shift_display = f"{hours:02d}:{minutes:02d}"
+    else:
+        total_shift_display = "N/A"
+
+
     with col3:
         st.markdown(f"""
             <div class="metric-container">
                 <div class="metric-title">Lunch Time</div>
-                <div class="metric-value">{(lunch.strftime("%H:%M") if lunch else "–")}</div>
+                <div class="metric-value">{lunch_start_time}</div>
             </div>
         """, unsafe_allow_html=True)
     with col4:
         st.markdown(f"""
             <div class="metric-container">
                 <div class="metric-title">Total Shift Time</div>
-                <div class="metric-value">{(str(shiftl).split(".")[0] if shiftl else "–")}</div>
+                <div class="metric-value">{total_shift_display}</div>
             </div>
         """, unsafe_allow_html=True)
 
