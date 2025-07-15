@@ -141,6 +141,28 @@ st.markdown("""
         text-align: center;
     }
 
+    /* NEW: For warning metrics that need centering and specific font sizes */
+    .metric-container-warning {
+        padding: 8px; /* Matches metric-container padding */
+        border-radius: 10px; /* Matches metric-container border-radius */
+        background-color: #ffebeb; /* Lighter red background */
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Matches metric-container box-shadow */
+        margin-bottom: 20px; /* Matches metric-container margin-bottom */
+        text-align: center; /* Center the text */
+        border: 1px solid #ff4d4d; /* Red border */
+    }
+    /* Ensure metric-title and metric-value styles apply to the new warning container */
+    .metric-container-warning .metric-title {
+        font-size: 1.1em; /* Matches metric-container .metric-title font-size */
+        color: #333333; /* Keep text color for title consistent */
+        margin-bottom: 5px; /* Matches metric-container .metric-title margin-bottom */
+    }
+    .metric-container-warning .metric-value {
+        font-size: 1.8em; /* Matches metric-container .metric-value font-size */
+        font-weight: bold;
+        color: #ff4d4d; /* Red color for the value */
+    }
+
     </style>
 """, unsafe_allow_html=True)
 
@@ -259,7 +281,7 @@ if sched == "Not Assigned":
 elif not adherence_data_available:
     # Case 2: Shift scheduled, but no adherence data available (agent absent)
     st.image("absent.png", caption="You were Absent from your scheduled shift on this day", width=300)
-    
+
 else:
     # Case 3: Shift scheduled and adherence data is available - display full dashboard
     earliest = df_agent_day["Start DT"].min()
@@ -422,7 +444,7 @@ else:
         first_segment_start = agent_daily_presence_filtered['Start DT'].min()
         last_segment_end = agent_daily_presence_filtered['End DT'].max()
         total_shift_duration = last_segment_end - first_segment_start
-        
+
         # Convert total_shift_duration to hh:mm format
         total_seconds = total_shift_duration.total_seconds()
         hours = int(total_seconds // 3600)
@@ -431,10 +453,22 @@ else:
     else:
         total_shift_display = "N/A"
 
-
     with col3:
+        # Calculate actual shift start for lunch time adherence
+        actual_shift_start = df_agent_day["Start DT"].min() if not df_agent_day.empty else None
+
+        lunch_warning = False
+        if lunch_time_entry is not None and actual_shift_start is not None:
+            time_to_lunch = lunch_time_entry['Start DT'] - actual_shift_start
+            # Check if lunch is less than 3 hours (10800 seconds) or more than 5 hours (18000 seconds) from shift start
+            if time_to_lunch.total_seconds() < 3 * 3600 or time_to_lunch.total_seconds() > 5 * 3600:
+                lunch_warning = True
+
+        # Use the new class for warnings in metric containers
+        lunch_box_class = "metric-container-warning" if lunch_warning else "metric-container"
+
         st.markdown(f"""
-            <div class="metric-container">
+            <div class="{lunch_box_class}">
                 <div class="metric-title">Lunch Time</div>
                 <div class="metric-value">{lunch_start_time}</div>
             </div>
@@ -499,20 +533,3 @@ else:
         st.markdown("#### Incidents of Lateness (Last 30 Days)")
         for incident in lateness_incidents:
             st.markdown(incident)
-
-    # st.markdown("### Utilization Rates") # Removed this section header
-    # col1, col2 = st.columns(2) # Removed these columns as they are no longer needed
-    # with col1:
-    #     st.markdown(f"""
-    #         <div class="metric-container">
-    #             <div class="metric-title">Chat Utilization</div>
-    #             <div class="metric-value">{chat_util:.1%}</div>
-    #         </div>
-    #     """, unsafe_allow_html=True)
-    # with col2:
-    #     st.markdown(f"""
-    #         <div class="metric-container">
-    #             <div class="metric-title">Email Utilization</div>
-    #             <div class="metric-value">{(email_util is not None and f"{email_util:.1%}" or "Not Assigned")}</div>
-    #         </div>
-    #     """, unsafe_allow_html=True)
