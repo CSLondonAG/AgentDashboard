@@ -292,36 +292,39 @@ else:
     num_avail_chat = num_handled_chat = 0
     num_avail_email = num_handled_email = 0
 
-    for t in minutes:
-        # Filter for presence within the current minute
-        pres_at_t = df_presence[
-            (df_presence["Created By: Full Name"] == agent) &
-            (df_presence["Start DT"] <= t) &
-            (df_presence["End DT"] > t)
+for t in minutes:
+    # Filter for presence within the current minute
+    pres_at_t = df_presence[
+        (df_presence["Created By: Full Name"] == agent) &
+        (df_presence["Start DT"] <= t) &
+        (df_presence["End DT"] > t)
+    ]
+    status = pres_at_t.iloc[0]["Service Presence Status: Developer Name"] if not pres_at_t.empty else None
+
+    # Check for chat
+    if status in ("Available_Chat", "Available_All"):
+        its_chat = df_items[
+            (df_items["User: Full Name"] == agent) &
+            (df_items["Service Channel: Developer Name"] == "sfdc_liveagent") &
+            (df_items["Start DT"] <= t) &
+            (df_items["End DT"] > t)
         ]
-        status = pres_at_t.iloc[0]["Service Presence Status: Developer Name"] if not pres_at_t.empty else None
+        num_avail_chat += 1
+        if not its_chat.empty:
+            num_handled_chat += 1
 
-        if status in ("Available_Chat", "Available_All"):
-            num_avail_chat += 1
-            its = df_items[
-                (df_items["User: Full Name"] == agent) &
-                (df_items["Service Channel: Developer Name"] == "sfdc_liveagent") &
-                (df_items["Start DT"] <= t) &
-                (df_items["End DT"] > t)
-            ]
-            if not its.empty:
-                num_handled_chat += 1
+    # Check for email
+    if status in ("Available_Email_and_Web", "Available_All"):
+        its_email = df_items[
+            (df_items["User: Full Name"] == agent) &
+            (df_items["Service Channel: Developer Name"] == "casesChannel") &
+            (df_items["Start DT"] <= t) &
+            (df_items["End DT"] > t)
+        ]
+        num_avail_email += 1
+        if not its_email.empty:
+            num_handled_email += 1
 
-        if status in ("Available_Email_and_Web", "Available_All"):
-            num_avail_email += 1
-            its_e = df_items[
-                (df_items["User: Full Name"] == agent) &
-                (df_items["Service Channel: Developer Name"] == "casesChannel") &
-                (df_items["Start DT"] <= t) &
-                (df_items["End DT"] > t)
-            ]
-            if not its_e.empty:
-                num_handled_email += 1
 
     chat_util = num_handled_chat / num_avail_chat if num_avail_chat > 0 else 0
     email_util = num_handled_email / num_avail_email if num_avail_email > 0 else None
