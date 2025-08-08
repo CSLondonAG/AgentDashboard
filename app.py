@@ -278,6 +278,7 @@ if sched == "Not Assigned":
     # Case 1: No shift scheduled for the agent
     st.image("day_off.png", caption="No Shift Scheduled for this Day", width=300)
     st.info("You were not scheduled to work on this day")
+
 elif not adherence_data_available:
     # Case 2: Shift scheduled, but no adherence data available (agent absent)
     st.image("absent.png", caption="You were Absent from your scheduled shift on this day", width=300)
@@ -288,47 +289,47 @@ else:
     latest = df_agent_day["End DT"].max()
     sched_adherence = f"{earliest.strftime('%I:%M %p')} – {latest.strftime('%I:%M %p')}"
 
+    # >>> BEGIN FIXED LOGIC REGION (keep visuals unchanged) <<<
     minutes = pd.date_range(start=start_dt, end=end_dt, freq="min", inclusive="left")
     num_avail_chat = num_handled_chat = 0
     num_avail_email = num_handled_email = 0
 
-for t in minutes:
-    # Filter for presence within the current minute
-    pres_at_t = df_presence[
-        (df_presence["Created By: Full Name"] == agent) &
-        (df_presence["Start DT"] <= t) &
-        (df_presence["End DT"] > t)
-    ]
-    status = pres_at_t.iloc[0]["Service Presence Status: Developer Name"] if not pres_at_t.empty else None
-
-    # Check for chat
-    if status in ("Available_Chat", "Available_All"):
-        its_chat = df_items[
-            (df_items["User: Full Name"] == agent) &
-            (df_items["Service Channel: Developer Name"] == "sfdc_liveagent") &
-            (df_items["Start DT"] <= t) &
-            (df_items["End DT"] > t)
+    for t in minutes:
+        # Filter for presence within the current minute
+        pres_at_t = df_presence[
+            (df_presence["Created By: Full Name"] == agent) &
+            (df_presence["Start DT"] <= t) &
+            (df_presence["End DT"] > t)
         ]
-        num_avail_chat += 1
-        if not its_chat.empty:
-            num_handled_chat += 1
+        status = pres_at_t.iloc[0]["Service Presence Status: Developer Name"] if not pres_at_t.empty else None
 
-    # Check for email
-    if status in ("Available_Email_and_Web", "Available_All"):
-        its_email = df_items[
-            (df_items["User: Full Name"] == agent) &
-            (df_items["Service Channel: Developer Name"] == "casesChannel") &
-            (df_items["Start DT"] <= t) &
-            (df_items["End DT"] > t)
-        ]
-        num_avail_email += 1
-        if not its_email.empty:
-            num_handled_email += 1
+        # CHAT: Only count availability when actually handling a chat item at this minute
+        if status in ("Available_Chat", "Available_All"):
+            its = df_items[
+                (df_items["User: Full Name"] == agent) &
+                (df_items["Service Channel: Developer Name"] == "sfdc_liveagent") &
+                (df_items["Start DT"] <= t) &
+                (df_items["End DT"] > t)
+            ]
+            if not its.empty:
+                num_avail_chat += 1
+                num_handled_chat += 1
 
+        # EMAIL: Only count availability when actually handling an email item at this minute
+        if status in ("Available_Email_and_Web", "Available_All"):
+            its_e = df_items[
+                (df_items["User: Full Name"] == agent) &
+                (df_items["Service Channel: Developer Name"] == "casesChannel") &
+                (df_items["Start DT"] <= t) &
+                (df_items["End DT"] > t)
+            ]
+            if not its_e.empty:
+                num_avail_email += 1
+                num_handled_email += 1
 
     chat_util = num_handled_chat / num_avail_chat if num_avail_chat > 0 else 0
     email_util = num_handled_email / num_avail_email if num_avail_email > 0 else None
-
+    # >>> END FIXED LOGIC REGION <<<
 
     # Average Handling Time (AHT) & Volume section (moved to top)
     st.markdown("### Average Handling Time (AHT) & Volume") # No line break above this as requested
