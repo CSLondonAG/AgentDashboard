@@ -182,8 +182,6 @@ else:
 
     # -----------------------------------------------------
     # SHIFT UTILIZATION (single %)
-    #   Fix for your TypeError: ensure df_items datetime before loop
-    #   (load_data already coerced, and we drop NaT rows, so this is safe)
     # -----------------------------------------------------
     minutes = pd.date_range(start=start_dt, end=end_dt, freq="min", inclusive="left")
 
@@ -354,7 +352,11 @@ else:
         avail_minutes_only = int((available_seconds % 3600) // 60)
         total_available_display = f"{avail_hours:02d}:{avail_minutes_only:02d}"
     else:
+        available_seconds = 0
         total_available_display = "00:00"
+
+    # Threshold check for warning (7 hours 50 minutes = 28200 seconds)
+    availability_warning = available_seconds < (7 * 3600 + 50 * 60)
 
     with col3:
         # Lunch timing validation: between 3h and 5h from actual shift start
@@ -383,8 +385,9 @@ else:
         """, unsafe_allow_html=True)
 
     with col5:
+        avail_box_class = "metric-container-warning" if availability_warning else "metric-container"
         st.markdown(f"""
-            <div class="metric-container">
+            <div class="{avail_box_class}">
                 <div class="metric-title">Total Available Time</div>
                 <div class="metric-value">{total_available_display}</div>
             </div>
@@ -428,7 +431,7 @@ else:
                 <div class="metric-title">Total Lateness (30-Day Rolling)</div>
                 <div class="metric-value">
                     {int(total_minutes_late)} min late
-                    {'<span style="color:red; font-size: 0.7em;"> &#x26A0;</span>' if total_minutes_late > 0 else ''}
+                    {'<span style=\"color:red; font-size: 0.7em;\"> &#x26A0;</span>' if total_minutes_late > 0 else ''}
                 </div>
             </div>
         """, unsafe_allow_html=True)
