@@ -311,10 +311,10 @@ else:
     st.markdown("---")
 
     # -----------------------------------------------------
-    # Daily Overview: Lunch + Total Shift Duration
+    # Daily Overview: Lunch + Total Shift Duration + Total Available Time (NEW)
     # -----------------------------------------------------
     st.markdown("### Daily Overview")
-    col3, col4 = st.columns(2)
+    col3, col4, col5 = st.columns(3)
 
     agent_daily_presence_filtered = df_presence[
         (df_presence['Created By: Full Name'] == agent) &
@@ -342,6 +342,20 @@ else:
     else:
         total_shift_display = "N/A"
 
+    # NEW: Total Available Time (sum of all presence rows in any Available* status)
+    available_statuses = {"Available_Chat", "Available_Email_and_Web", "Available_All"}
+    avail_df = agent_daily_presence_filtered[
+        agent_daily_presence_filtered['Service Presence Status: Developer Name'].isin(available_statuses)
+    ].copy()
+
+    if not avail_df.empty:
+        available_seconds = (avail_df['End DT'] - avail_df['Start DT']).dt.total_seconds().sum()
+        avail_hours = int(available_seconds // 3600)
+        avail_minutes_only = int((available_seconds % 3600) // 60)
+        total_available_display = f"{avail_hours:02d}:{avail_minutes_only:02d}"
+    else:
+        total_available_display = "00:00"
+
     with col3:
         # Lunch timing validation: between 3h and 5h from actual shift start
         actual_shift_start = df_agent_day["Start DT"].min() if not df_agent_day.empty else None
@@ -368,6 +382,14 @@ else:
             </div>
         """, unsafe_allow_html=True)
 
+    with col5:
+        st.markdown(f"""
+            <div class="metric-container">
+                <div class="metric-title">Total Available Time</div>
+                <div class="metric-value">{total_available_display}</div>
+            </div>
+        """, unsafe_allow_html=True)
+
     st.markdown("---")
 
     # -----------------------------------------------------
@@ -381,7 +403,7 @@ else:
     for d in window_days:
         shift_col_d = d.strftime("%d/%m/%Y")
         sched_row_d = df_shifts[df_shifts["Agent Name"].str.lower() == agent.lower()] if "Agent Name" in df_shifts.columns else pd.DataFrame()
-        sched_val_d = sched_row_d[shift_col_d].values[0] if (not sched_row_d.empty and shift_col_d in sched_row_d.columns) else None
+        sched_val_d = sched_row_d[shift_col_d].values[0] if (not sched_row_d.empty and shift_col_d in df_shifts.columns) else None
         sched_shift_d = str(sched_val_d).strip() if pd.notna(sched_val_d) else None
 
         df_day_late_check = df_presence[
