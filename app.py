@@ -439,3 +439,49 @@ else:
         st.markdown("#### Incidents of Lateness (Last 30 Days)")
         for incident in lateness_incidents:
             st.markdown(incident)
+# =========================================================
+# Absence (Last 90 Days)
+# =========================================================
+st.markdown("---")
+st.markdown("### Absence – Last 90 Days")
+
+# last 90 days from the chosen dashboard date
+abs_window = [date - timedelta(days=i) for i in range(1, 91)]
+
+absent_days = []
+
+for d in abs_window:
+    # shift assigned?
+    shift_col_d = d.strftime("%d/%m/%Y")
+    sched_row_d = df_shifts[df_shifts["Agent Name"].str.lower() == agent.lower()] if "Agent Name" in df_shifts.columns else pd.DataFrame()
+    sched_val_d = sched_row_d[shift_col_d].values[0] if (not sched_row_d.empty and shift_col_d in df_shifts.columns) else None
+    sched_shift_d = str(sched_val_d).strip() if pd.notna(sched_val_d) else None
+
+    # if "Not Assigned", this is a day off, not an absence
+    if not sched_shift_d or sched_shift_d.lower() == "not assigned" or sched_shift_d == "":
+        continue
+
+    # did presence entries exist for this agent/date?
+    df_day_presence = df_presence[
+        (df_presence["Created By: Full Name"] == agent) &
+        (df_presence["Start DT"].dt.date == d)
+    ]
+
+    if df_day_presence.empty:
+        absent_days.append(d.strftime("%d %b %Y"))
+
+# DISPLAY METRIC
+if not absent_days:
+    st.image("no_late.png", caption="No Absences in the Last 90 Days", width=300)
+else:
+    st.markdown(f"""
+        <div class="metric-container-warning">
+            <div class="metric-title">Absence Count (Last 90 Days)</div>
+            <div class="metric-value">{len(absent_days)}</div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    st.markdown("#### Absence Dates (Last 90 Days)")
+    for ad in absent_days:
+        st.markdown(f"- **{ad}**")
+
