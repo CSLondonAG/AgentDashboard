@@ -1,25 +1,17 @@
 import streamlit as st
 import pandas as pd
-
-# --- Load All Data Freshly on Each Run ---
-
-# Presence: parse known datetime columns
-df_presence = pd.read_csv("report_presence.csv", parse_dates=["Start DT", "End DT"])
-
-# Report Items: parse known datetime columns
-df_items = pd.read_csv("report_items.csv", parse_dates=["Start DT", "End DT"])
-
-# Shifts: no date parsing required
-df_shifts = pd.read_csv("shifts.csv")
-
-from datetime import datetime, timedelta, time as dtime
-
-# --- Load the SVG Logo ---
-with open("goat_logo.svg", "r") as f:
-    svg_code = f.read()
+from pandas.errors import EmptyDataError
+from datetime import datetime, timedelta, time as dtime, date as date_type
 
 # IMPORTANT: st.set_page_config must be called as the very first Streamlit command
 st.set_page_config(page_title="Agent Dashboard", layout="wide")
+
+# --- Load the SVG Logo (wrapped in try so it doesn't crash if missing) ---
+try:
+    with open("goat_logo.svg", "r", encoding="utf-8") as f:
+        svg_code = f.read()
+except Exception:
+    svg_code = ""
 
 # Custom CSS for better aesthetics and font sizes
 st.markdown("""
@@ -75,14 +67,6 @@ st.markdown("""
         color: #333333;
     }
 
-    .st-emotion-cache-1r6dm7m {
-        font-size: 1.5em;
-        font-weight: bold;
-    }
-    .st-emotion-cache-16idsysf p {
-        font-size: 0.2em;
-        color: #555555;
-    }
     .metric-container {
         padding: 8px;
         border-radius: 10px;
@@ -152,28 +136,78 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+
+# -----------------------------
+# Data loading helper
+# -----------------------------
+def safe_read_csv(path, **kwargs):
+    """Read a CSV and gracefully handle empty files."""
+    try:
+        return pd.read_csv(path, **kwargs)
+    except EmptyDataError:
+        return pd.DataFrame()
+
+
 def load_data():
-    df_items = pd.read_csv("report_items.csv", dayfirst=True)
-    df_items["Start DT"] = pd.to_datetime(df_items["Start DT"], dayfirst=True, errors="coerce")
-    df_items["End DT"] = pd.to_datetime(df_items["End DT"], dayfirst=True, errors="coerce")
+    # Items
+    df_items = safe_read_csv("report_items.csv", dayfirst=True)
+    if not df_items.empty:
+        df_items["Start DT"] = pd.to_datetime(df_items["Start DT"], dayfirst=True, errors="coerce")
+        df_items["End DT"] = pd.to_datetime(df_items["End DT"], dayfirst=True, errors="coerce")
+        df_items["User: Full Name"] = df_items["User: Full Name"].astype(str).str.strip()
+        df_items["Service Channel: Developer Name"] = df_items["Service Channel: Developer Name"].astype(str).str.strip()
 
-    df_presence = pd.read_csv("report_presence.csv", dayfirst=True)
-    df_presence["Start DT"] = pd.to_datetime(df_presence["Start DT"], dayfirst=True, errors="coerce")
-    df_presence["End DT"] = pd.to_datetime(df_presence["End DT"], dayfirst=True, errors="coerce")
+    # Presence
+    df_presence = safe_read_csv("report_presence.csv", dayfirst=True)
+    if not df_presence.empty:
+        df_presence["Start DT"] = pd.to_datetime(df_presence["Start DT"], dayfirst=True, errors="coerce")
+        df_presence["End DT"] = pd.to_datetime(df_presence["End DT"], dayfirst=True, errors="coerce")
+        df_presence["Created By: Full Name"] = df_presence["Created By: Full Name"].astype(str).str.strip()
+        df_presence["Service Presence Status: Developer Name"] = df_presence["Service Presence Status: Developer Name"].astype(str).str.strip()
 
-    df_shifts = pd.read_csv("shifts.csv")
-    df_shifts.rename(columns={"Column1": "Agent Name"}, inplace=True)
-    df_shifts["Agent Name"] = df_shifts["Agent Name"].str.strip()
-
-    df_items["User: Full Name"] = df_items["User: Full Name"].str.strip()
-    df_items["Service Channel: Developer Name"] = df_items["Service Channel: Developer Name"].str.strip()
-    df_presence["Created By: Full Name"] = df_presence["Created By: Full Name"].str.strip()
-    df_presence["Service Presence Status: Developer Name"] = df_presence["Service Presence Status: Developer Name"].str.strip()
+    # Shifts
+    df_shifts = safe_read_csv("shifts.csv")
+    if not df_shifts.empty:
+        if "Column1" in df_shifts.columns and "Agent Name" not in df_shifts.columns:
+            df_shifts.rename(columns={"Column1": "Agent Name"}, inplace=True)
+        if "Agent Name" in df_shifts.columns:
+            df_shifts["Agent Name"] = df_shifts["Agent Name"].astype(str).str.strip()
 
     return df_items, df_presence, df_shifts
 
+
 df_items, df_presence, df_shifts = load_data()
 
+if df_presence.empty or df_items.empty or df_shifts.empty:
+    st.error("One or more data files are empty or missing. Please check report_items.csv, report_presence.csv, and shifts.csv.")
+    st.stop()
+
+# -----------------------------
+# Utility functions
+# -----------------------------
+def parse_shift_range(shift_str, base_date):
+    if not shift_str or " - " not in shift_str:
+        return None, None
+    try:
+        start_str, end_str = shift_str.split(" - ")
+        start_time = datetime.strptime(start_str.strip().upper(), "%I:%M %p").time()
+        end_time = datetime.strptime(end_str.strip().upper(), "%I:%M %p").time()
+        return datetime.combine(base_date, start_time), datetime.combine(base_date, end_time)
+    except Exception:
+        return None, None
+
+
+def format_seconds_to_mm_ss(total_seconds):
+    if total_seconds is None:
+        return "–"
+    minutes = int(total_seconds // 60)
+    seconds = int(total_seconds % 60)
+    return f"{minutes:02d}:{seconds:02d}"
+
+
+# -----------------------------
+# Sidebar controls
+# -----------------------------
 agents = sorted(df_presence["Created By: Full Name"].dropna().unique())
 st.sidebar.header("Select Agent and Date Range")
 agent = st.sidebar.selectbox("Agent Name", agents)
@@ -201,55 +235,9 @@ else:
 if start_date > end_date:
     start_date, end_date = end_date, start_date
 
-from datetime import date as date_type
-
-def parse_time(val):
-    if pd.isna(val):
-        return None
-    for fmt in ("%H:%M:%S", "%H:%M"):
-        try:
-            return datetime.strptime(str(val).strip(), fmt)
-        except Exception:
-            continue
-    return None
-
-def parse_td(val):
-    if pd.isna(val):
-        return None
-    h, m, s = str(val).split(":")
-    return timedelta(hours=int(h), minutes=int(m), seconds=int(s))
-
-def parse_shift_range(shift_str, base_date):
-    if not shift_str or " - " not in shift_str:
-        return None, None
-    try:
-        start_str, end_str = shift_str.split(" - ")
-        start_time = datetime.strptime(start_str.strip().upper(), "%I:%M %p").time()
-        end_time = datetime.strptime(end_str.strip().upper(), "%I:%M %p").time()
-        return datetime.combine(base_date, start_time), datetime.combine(base_date, end_time)
-    except Exception:
-        return None, None
-
-def parse_shift_start(shift_str, base_date):
-    if not shift_str or "–" not in shift_str:
-        return None
-    start_part = shift_str.split("–")[0].strip().upper()
-    for fmt in ("%H:%M", "%I:%M %p"):
-        try:
-            shift_time = datetime.strptime(start_part, fmt).time()
-            return datetime.combine(base_date, shift_time)
-        except ValueError:
-            continue
-    return None
-
-def format_seconds_to_mm_ss(total_seconds):
-    if total_seconds is None:
-        return "–"
-    minutes = int(total_seconds // 60)
-    seconds = int(total_seconds % 60)
-    return f"{minutes:02d}:{seconds:02d}"
-
-# --- Header (Agent + Date Range) ---
+# -----------------------------
+# Header (Agent + Date range)
+# -----------------------------
 st.markdown(f"""
     <div class="custom-main-header-container">
         <h1>Agent Dashboard for {agent}</h1>
@@ -268,11 +256,12 @@ st.markdown(
 )
 st.markdown("---")
 
-# --- Range boundaries ---
+# -----------------------------
+# Filter data to agent + range
+# -----------------------------
 range_start_dt = datetime.combine(start_date, dtime(0, 0))
 range_end_dt = datetime.combine(end_date, dtime(23, 59))
 
-# Filter presence & items to agent + range
 df_presence_agent_range = df_presence[
     (df_presence["Created By: Full Name"] == agent)
     & (df_presence["End DT"] >= range_start_dt)
@@ -285,15 +274,15 @@ df_items_agent_range = df_items[
     & (df_items["Start DT"] <= range_end_dt)
 ].copy()
 
-# Determine if any shifts scheduled in this range
+# List of days in the selected range
 day_list = [
     start_date + timedelta(days=i)
     for i in range((end_date - start_date).days + 1)
 ]
 
-has_scheduled_shift = False
+# Check schedule in range
 agent_shift_row = df_shifts[df_shifts["Agent Name"].str.lower() == agent.lower()] if "Agent Name" in df_shifts.columns else pd.DataFrame()
-
+has_scheduled_shift = False
 for d in day_list:
     shift_col = d.strftime("%d/%m/%Y")
     if not agent_shift_row.empty and shift_col in df_shifts.columns:
@@ -302,17 +291,17 @@ for d in day_list:
             has_scheduled_shift = True
             break
 
-# --- Top-level conditional view ---
+# -----------------------------
+# High-level conditional view
+# -----------------------------
 if not has_scheduled_shift and df_presence_agent_range.empty:
-    # No scheduled shifts and no presence – treat as time off
     st.image("day_off.png", caption="No Shifts Scheduled in this Date Range", width=300)
     st.info("You were not scheduled to work on any of the selected days.")
 elif has_scheduled_shift and df_presence_agent_range.empty:
-    # Scheduled at least once, but zero presence across entire range
     st.image("absent.png", caption="Absent for all Scheduled Shifts in this Date Range", width=300)
 else:
     # =========================================================
-    # AHT & Volume (Combined across range)
+    # AHT & Volume – Selected Range
     # =========================================================
     st.markdown("### Average Handling Time (AHT) & Volume – Selected Range")
 
@@ -329,7 +318,7 @@ else:
     num_email_items = len(email_items)
 
     # =========================================================
-    # Shift Utilization (Combined across range)
+    # Shift Utilisation – Selected Range
     # =========================================================
     minutes = pd.date_range(start=range_start_dt, end=range_end_dt, freq="min", inclusive="left")
 
@@ -398,7 +387,6 @@ else:
     else:
         long_chat["Handle Time (mm:ss)"] = long_chat["Duration"].apply(format_seconds_to_mm_ss)
 
-        # Choose useful columns if they exist
         preferred_cols = [
             "Handle Time (mm:ss)",
             "Start DT",
@@ -413,11 +401,8 @@ else:
             "Service Channel: Developer Name",
         ]
         cols_present = [c for c in preferred_cols if c in long_chat.columns]
-        # Ensure Handle Time is first
         if "Handle Time (mm:ss)" in cols_present:
-            cols_present = (
-                ["Handle Time (mm:ss)"] + [c for c in cols_present if c != "Handle Time (mm:ss)"]
-            )
+            cols_present = ["Handle Time (mm:ss)"] + [c for c in cols_present if c != "Handle Time (mm:ss)"]
 
         display_df = long_chat[cols_present] if cols_present else long_chat
         st.dataframe(display_df, use_container_width=True)
@@ -425,7 +410,7 @@ else:
     st.markdown("---")
 
     # =========================================================
-    # Daily Overview (aggregated across range)
+    # Daily Overview – Selected Range
     # =========================================================
     st.markdown("### Daily Overview – Selected Range")
 
@@ -445,19 +430,16 @@ else:
 
         days_worked += 1
 
-        # Shift duration for the day (first start to last end)
         first_segment_start = agent_daily["Start DT"].min()
         last_segment_end = agent_daily["End DT"].max()
         day_shift_duration = (last_segment_end - first_segment_start).total_seconds()
         total_shift_seconds += day_shift_duration
 
-        # Available time for the day
         avail_df_day = agent_daily[agent_daily["Service Presence Status: Developer Name"].isin(available_statuses)]
         if not avail_df_day.empty:
             day_available_seconds = (avail_df_day["End DT"] - avail_df_day["Start DT"]).dt.total_seconds().sum()
             total_available_seconds += day_available_seconds
 
-        # Lunch compliance
         lunch_entry = agent_daily[
             agent_daily["Service Presence Status: Developer Name"] == "Busy_Lunch"
         ].sort_values(by="Start DT")
@@ -468,7 +450,6 @@ else:
             if time_to_lunch < 3 * 3600 or time_to_lunch > 5 * 3600:
                 lunch_days_out_of_window += 1
 
-    # Format totals
     if total_shift_seconds > 0:
         hours = int(total_shift_seconds // 3600)
         minutes_only = int((total_shift_seconds % 3600) // 60)
@@ -483,7 +464,6 @@ else:
     else:
         total_available_display = "00:00"
 
-    # Availability warning: expect 7h50 per worked day
     expected_seconds = days_worked * (7 * 3600 + 50 * 60)
     availability_warning = days_worked > 0 and total_available_seconds < expected_seconds
 
@@ -517,17 +497,15 @@ else:
         box_class = "metric-container-warning" if availability_warning else "metric-container"
         st.markdown(f"""
             <div class="{box_class}">
-                <div class="{box_class}">
-                    <div class="metric-title">Total Available Time</div>
-                    <div class="metric-value">{total_available_display}</div>
-                </div>
+                <div class="metric-title">Total Available Time</div>
+                <div class="metric-value">{total_available_display}</div>
             </div>
         """, unsafe_allow_html=True)
 
     st.markdown("---")
 
     # =========================================================
-    # Per-Day Shift & Adherence Table (Option 2)
+    # Per-Day Shift & Adherence – Selected Range
     # =========================================================
     st.markdown("### Per-Day Shift & Adherence (Selected Range)")
 
@@ -593,7 +571,7 @@ else:
         st.info("No per-day shift data available for this range.")
 
 # =========================================================
-# Lateness (Last 30 Days) – anchored to end of selected range
+# Lateness – Last 30 Days (from end of selected range)
 # =========================================================
 st.markdown("---")
 st.markdown("### Lateness – Last 30 Days (from end of selected range)")
@@ -648,7 +626,7 @@ else:
         st.markdown(incident)
 
 # =========================================================
-# Absence (Last 90 Days) – anchored to end of selected range
+# Absence – Last 90 Days (from end of selected range)
 # =========================================================
 st.markdown("---")
 st.markdown("### Absence – Last 90 Days (from end of selected range)")
