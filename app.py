@@ -385,6 +385,43 @@ else:
         </div>
     """, unsafe_allow_html=True)
 
+    # =========================================================
+    # Long Chat Handles (>= 15 minutes) – table
+    # =========================================================
+    st.markdown("---")
+    st.markdown("### Long Chat Handles (≥ 15 minutes) – Selected Range")
+
+    long_chat = chat_items[chat_items["Duration"] >= 15 * 60].copy()
+
+    if long_chat.empty:
+        st.info("No chat items with a handle time of 15 minutes or more in the selected range.")
+    else:
+        long_chat["Handle Time (mm:ss)"] = long_chat["Duration"].apply(format_seconds_to_mm_ss)
+
+        # Choose useful columns if they exist
+        preferred_cols = [
+            "Handle Time (mm:ss)",
+            "Start DT",
+            "End DT",
+            "Duration",
+            "Case Number",
+            "Parent Case",
+            "Interaction ID",
+            "Live Chat Transcript ID",
+            "Subject",
+            "Record Type",
+            "Service Channel: Developer Name",
+        ]
+        cols_present = [c for c in preferred_cols if c in long_chat.columns]
+        # Ensure Handle Time is first
+        if "Handle Time (mm:ss)" in cols_present:
+            cols_present = (
+                ["Handle Time (mm:ss)"] + [c for c in cols_present if c != "Handle Time (mm:ss)"]
+            )
+
+        display_df = long_chat[cols_present] if cols_present else long_chat
+        st.dataframe(display_df, use_container_width=True)
+
     st.markdown("---")
 
     # =========================================================
@@ -480,8 +517,10 @@ else:
         box_class = "metric-container-warning" if availability_warning else "metric-container"
         st.markdown(f"""
             <div class="{box_class}">
-                <div class="metric-title">Total Available Time</div>
-                <div class="metric-value">{total_available_display}</div>
+                <div class="{box_class}">
+                    <div class="metric-title">Total Available Time</div>
+                    <div class="metric-value">{total_available_display}</div>
+                </div>
             </div>
         """, unsafe_allow_html=True)
 
@@ -570,8 +609,8 @@ agent_shift_row = df_shifts[df_shifts["Agent Name"].str.lower() == agent.lower()
 for d in window_days:
     shift_col = d.strftime("%d/%m/%Y")
     if not agent_shift_row.empty and shift_col in df_shifts.columns:
-        sched_val = agent_shift_row[shift_col].values[0]
-        sched_shift_d = str(sched_val).strip() if pd.notna(sched_val) else None
+        sched_val_d = agent_shift_row[shift_col].values[0]
+        sched_shift_d = str(sched_val_d).strip() if pd.notna(sched_val_d) else None
     else:
         sched_shift_d = None
 
