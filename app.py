@@ -138,7 +138,7 @@ st.markdown("""
 
 
 # -----------------------------
-# Data loading helper
+# Data loading helpers
 # -----------------------------
 def safe_read_csv(path, **kwargs):
     """Read a CSV and gracefully handle empty files."""
@@ -173,14 +173,28 @@ def load_data():
         if "Agent Name" in df_shifts.columns:
             df_shifts["Agent Name"] = df_shifts["Agent Name"].astype(str).str.strip()
 
-    return df_items, df_presence, df_shifts
+    # Chat transcripts (NEW)
+    df_chat = safe_read_csv("chat.csv", dayfirst=True)
+    if not df_chat.empty:
+        if "Owner: Full Name" in df_chat.columns:
+            df_chat["Owner: Full Name"] = df_chat["Owner: Full Name"].astype(str).str.strip()
+        # Parse Date/Time Opened e.g. "23/10/2025, 12:35"
+        if "Date/Time Opened" in df_chat.columns:
+            df_chat["Date/Time Opened DT"] = pd.to_datetime(
+                df_chat["Date/Time Opened"],
+                format="%d/%m/%Y, %H:%M",
+                errors="coerce",
+            )
+
+    return df_items, df_presence, df_shifts, df_chat
 
 
-df_items, df_presence, df_shifts = load_data()
+df_items, df_presence, df_shifts, df_chat = load_data()
 
 if df_presence.empty or df_items.empty or df_shifts.empty:
     st.error("One or more data files are empty or missing. Please check report_items.csv, report_presence.csv, and shifts.csv.")
     st.stop()
+
 
 # -----------------------------
 # Utility functions
@@ -203,6 +217,64 @@ def format_seconds_to_mm_ss(total_seconds):
     minutes = int(total_seconds // 60)
     seconds = int(total_seconds % 60)
     return f"{minutes:02d}:{seconds:02d}"
+
+
+def enrich_long_chat_with_transcripts(long_chat_df, chat_df, agent_name, max_diff_minutes=10):
+    """
+    For each long chat item, find the closest transcript in chat_df
+    for the same agent (Owner: Full Name) within max_diff_minutes of Start DT.
+    """
+    if long_chat_df.empty or chat_df.empty:
+        return long_chat_df
+
+    if "Owner: Full Name" not in chat_df.columns or "Date/Time Opened DT" not in chat_df.columns:
+        return long_chat_df
+
+    # Only consider this agent’s chats
+    chat_agent = chat_df[chat_df["Owner: Full Name"] == agent_name].copy()
+    if chat_agent.empty:
+        return long_chat_df
+
+    chat_agent = chat_agent.dropna(subset=["Date/Time Opened DT"])
+
+    def find_match(row):
+        t = row["Start DT"]
+        if pd.isna(t):
+            return pd.Series({
+                "Case Number": None,
+                "Visitor Email": None,
+                "Chat Button: Developer Name": None,
+                "Abandoned After": None,
+                "Wait Time": None,
+            })
+        window = pd.Timedelta(minutes=max_diff_minutes)
+        subset = chat_agent[
+            (chat_agent["Date/Time Opened DT"] >= t - window) &
+            (chat_agent["Date/Time Opened DT"] <= t + window)
+        ]
+        if subset.empty:
+            return pd.Series({
+                "Case Number": None,
+                "Visitor Email": None,
+                "Chat Button: Developer Name": None,
+                "Abandoned After": None,
+                "Wait Time": None,
+            })
+
+        # Pick the closest in time
+        idx = (subset["Date/Time Opened DT"] - t).abs().idxmin()
+        m = subset.loc[idx]
+        return pd.Series({
+            "Case Number": m.get("Case Number"),
+            "Visitor Email": m.get("Visitor Email"),
+            "Chat Button: Developer Name": m.get("Chat Button: Developer Name"),
+            "Abandoned After": m.get("Abandoned After"),
+            "Wait Time": m.get("Wait Time"),
+        })
+
+    extra_cols = long_chat_df.apply(find_match, axis=1)
+    enriched = pd.concat([long_chat_df.reset_index(drop=True), extra_cols], axis=1)
+    return enriched
 
 
 # -----------------------------
@@ -375,7 +447,7 @@ else:
     """, unsafe_allow_html=True)
 
     # =========================================================
-    # Long Chat Handles (>= 15 minutes) – table
+    # Long Chat Handles (>= 15 minutes) – table with chat.csv enrichment
     # =========================================================
     st.markdown("---")
     st.markdown("### Long Chat Handles (≥ 15 minutes) – Selected Range")
@@ -387,17 +459,22 @@ else:
     else:
         long_chat["Handle Time (mm:ss)"] = long_chat["Duration"].apply(format_seconds_to_mm_ss)
 
+        # Enrich with transcript/case data from chat.csv
+        long_chat = enrich_long_chat_with_transcripts(long_chat, df_chat, agent)
+
         preferred_cols = [
             "Handle Time (mm:ss)",
             "Start DT",
             "End DT",
             "Duration",
+            # From chat.csv:
             "Case Number",
-            "Parent Case",
-            "Interaction ID",
-            "Live Chat Transcript ID",
-            "Subject",
-            "Record Type",
+            "Visitor Email",
+            "Chat Button: Developer Name",
+            "Wait Time",
+            "Abandoned After",
+            # Optional other context fields if present:
+            "Queue: Name",
             "Service Channel: Developer Name",
         ]
         cols_present = [c for c in preferred_cols if c in long_chat.columns]
