@@ -173,12 +173,11 @@ def load_data():
         if "Agent Name" in df_shifts.columns:
             df_shifts["Agent Name"] = df_shifts["Agent Name"].astype(str).str.strip()
 
-    # Chat transcripts (NEW)
+    # Chat transcripts (for enrichment)
     df_chat = safe_read_csv("chat.csv", dayfirst=True)
     if not df_chat.empty:
         if "Owner: Full Name" in df_chat.columns:
             df_chat["Owner: Full Name"] = df_chat["Owner: Full Name"].astype(str).str.strip()
-        # Parse Date/Time Opened e.g. "23/10/2025, 12:35"
         if "Date/Time Opened" in df_chat.columns:
             df_chat["Date/Time Opened DT"] = pd.to_datetime(
                 df_chat["Date/Time Opened"],
@@ -226,7 +225,6 @@ def enrich_long_chat_with_transcripts(long_chat_df, chat_df, agent_name, max_dif
     """
     if long_chat_df.empty or chat_df.empty:
         return long_chat_df
-
     if "Owner: Full Name" not in chat_df.columns or "Date/Time Opened DT" not in chat_df.columns:
         return long_chat_df
 
@@ -452,7 +450,12 @@ else:
     st.markdown("---")
     st.markdown("### Long Chat Handles (≥ 15 minutes) – Selected Range")
 
-    long_chat = chat_items[chat_items["Duration"] >= 15 * 60].copy()
+    # Extra defensive filter: make absolutely sure we're only using this agent's chats
+    agent_chat_items = chat_items.copy()
+    if "User: Full Name" in agent_chat_items.columns:
+        agent_chat_items = agent_chat_items[agent_chat_items["User: Full Name"] == agent]
+
+    long_chat = agent_chat_items[agent_chat_items["Duration"] >= 15 * 60].copy()
 
     if long_chat.empty:
         st.info("No chat items with a handle time of 15 minutes or more in the selected range.")
