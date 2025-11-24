@@ -468,10 +468,18 @@ else:
     st.markdown("---")
     st.markdown("### Long Chat Handles (≥ 15 minutes) – Selected Range")
 
-    # Extra defensive filter: make absolutely sure we're only using this agent's chats
+    # Start from this agent's chat items
     agent_chat_items = chat_items.copy()
+
+    # Extra defensive filter: ensure only this agent
     if "User: Full Name" in agent_chat_items.columns:
         agent_chat_items = agent_chat_items[agent_chat_items["User: Full Name"] == agent]
+
+    # NEW: Deduplicate identical chat rows (prevents duplicated long chats)
+    agent_chat_items = agent_chat_items.drop_duplicates(
+        subset=["User: Full Name", "Start DT", "End DT", "Duration"],
+        keep="first"
+    )
 
     long_chat = agent_chat_items[agent_chat_items["Duration"] >= 15 * 60].copy()
 
