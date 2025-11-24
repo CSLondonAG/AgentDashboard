@@ -222,6 +222,9 @@ def enrich_long_chat_with_transcripts(long_chat_df, chat_df, agent_name, max_dif
     """
     For each long chat item, find the closest transcript in chat_df
     for the same agent (Owner: Full Name) within max_diff_minutes of Start DT.
+
+    This version guarantees one enrichment row per long_chat row and
+    avoids index-mismatch creating extra blank rows.
     """
     if long_chat_df.empty or chat_df.empty:
         return long_chat_df
@@ -235,43 +238,45 @@ def enrich_long_chat_with_transcripts(long_chat_df, chat_df, agent_name, max_dif
 
     chat_agent = chat_agent.dropna(subset=["Date/Time Opened DT"])
 
+    work_df = long_chat_df.reset_index(drop=True).copy()
+
     def find_match(row):
         t = row["Start DT"]
         if pd.isna(t):
-            return pd.Series({
+            return {
                 "Case Number": None,
                 "Visitor Email": None,
                 "Chat Button: Developer Name": None,
                 "Abandoned After": None,
                 "Wait Time": None,
-            })
+            }
         window = pd.Timedelta(minutes=max_diff_minutes)
         subset = chat_agent[
             (chat_agent["Date/Time Opened DT"] >= t - window) &
             (chat_agent["Date/Time Opened DT"] <= t + window)
         ]
         if subset.empty:
-            return pd.Series({
+            return {
                 "Case Number": None,
                 "Visitor Email": None,
                 "Chat Button: Developer Name": None,
                 "Abandoned After": None,
                 "Wait Time": None,
-            })
+            }
 
         # Pick the closest in time
         idx = (subset["Date/Time Opened DT"] - t).abs().idxmin()
         m = subset.loc[idx]
-        return pd.Series({
+        return {
             "Case Number": m.get("Case Number"),
             "Visitor Email": m.get("Visitor Email"),
             "Chat Button: Developer Name": m.get("Chat Button: Developer Name"),
             "Abandoned After": m.get("Abandoned After"),
             "Wait Time": m.get("Wait Time"),
-        })
+        }
 
-    extra_cols = long_chat_df.apply(find_match, axis=1)
-    enriched = pd.concat([long_chat_df.reset_index(drop=True), extra_cols], axis=1)
+    extra_cols = work_df.apply(find_match, axis=1, result_type="expand")
+    enriched = pd.concat([work_df, extra_cols], axis=1)
     return enriched
 
 
@@ -297,8 +302,14 @@ date_range = st.sidebar.date_input(
     max_value=max_date,
 )
 
+# Robust handling whether user selects a single date or a range
 if isinstance(date_range, (list, tuple)):
-    start_date, end_date = date_range
+    if len(date_range) == 2:
+        start_date, end_date = date_range
+    elif len(date_range) == 1:
+        start_date = end_date = date_range[0]
+    else:
+        start_date = end_date = max_date
 else:
     start_date = end_date = date_range
 
@@ -492,7 +503,7 @@ else:
             cols_present = ["Handle Time (mm:ss)"] + [c for c in cols_present if c != "Handle Time (mm:ss)"]
 
         display_df = long_chat[cols_present] if cols_present else long_chat
-        st.dataframe(display_df, use_container_width=True)
+        st.dataframe(display_df, width="stretch")
 
     st.markdown("---")
 
@@ -653,7 +664,9 @@ else:
 
     if per_day_rows:
         per_day_df = pd.DataFrame(per_day_rows)
-        st.dataframe(per_day_df, use_container_width=True)
+        # Coerce Late (min) to string to avoid Arrow int/str mix issues
+        per_day_df["Late (min)"] = per_day_df["Late (min)"].astype(str)
+        st.dataframe(per_day_df, width="stretch")
     else:
         st.info("No per-day shift data available for this range.")
 
