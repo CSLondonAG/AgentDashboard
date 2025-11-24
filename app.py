@@ -338,10 +338,17 @@ df_presence_agent_range = df_presence[
     & (df_presence["Start DT"] <= range_end_dt)
 ].copy()
 
-df_items_agent_range = df_items[
+# Items: filter by agent first, then by Start DT's DATE between start_date and end_date.
+df_items_agent = df_items[
     (df_items["User: Full Name"] == agent)
-    & (df_items["End DT"] >= range_start_dt)
-    & (df_items["Start DT"] <= range_end_dt)
+    & (~df_items["Start DT"].isna())
+    & (~df_items["End DT"].isna())
+].copy()
+df_items_agent["Start Date"] = df_items_agent["Start DT"].dt.date
+
+df_items_agent_range = df_items_agent[
+    (df_items_agent["Start Date"] >= start_date)
+    & (df_items_agent["Start Date"] <= end_date)
 ].copy()
 
 # List of days in the selected range
@@ -381,7 +388,7 @@ else:
     chat_items = df_range_items[df_range_items["Service Channel: Developer Name"] == "sfdc_liveagent"]
     email_items = df_range_items[df_range_items["Service Channel: Developer Name"] == "casesChannel"]
 
-    aht_chat = chat_items["Duration"].mean() if not chat_items.empty else None
+    aht_chat = chat_items["Duration"].mean() if not chat_items.empty else None    # seconds
     aht_email = email_items["Duration"].mean() if not email_items.empty else None
 
     num_chat_items = len(chat_items)
