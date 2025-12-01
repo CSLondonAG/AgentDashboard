@@ -284,6 +284,18 @@ def enrich_long_chat_with_transcripts(long_chat_df, chat_df, agent_name, max_dif
 # Sidebar controls
 # -----------------------------
 agents = sorted(df_presence["Created By: Full Name"].dropna().unique())
+
+# --- REMOVE AGENTS WHO HAVE LEFT THE COMPANY ---
+agents_to_remove = [
+    "Atuweni Masangano",
+    "Dorah Mwase",
+    "Jonathan Mandala",
+    "Lindah Sewero",
+    "Shiellah Phuka",
+]
+
+agents = [a for a in agents if a not in agents_to_remove]
+
 st.sidebar.header("Select Agent and Date Range")
 agent = st.sidebar.selectbox("Agent Name", agents)
 
