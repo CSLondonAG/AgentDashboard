@@ -287,6 +287,12 @@ def load_data():
 
     # Chat transcripts — one row per conversation, with exact start/end times
     df_chat = safe_read_csv("chat_transcripts.csv")
+    if df_chat.empty:
+        # Try common alternative filenames in case it was uploaded differently
+        for alt in ["chat_transcript.csv", "chat.csv", "transcripts.csv", "report1771339850121.csv"]:
+            df_chat = safe_read_csv(alt)
+            if not df_chat.empty:
+                break
     if not df_chat.empty:
         # Brute-force clean every column name: remove BOM, strip whitespace,
         # then build a lookup that matches regardless of BOM or encoding quirks
@@ -568,8 +574,12 @@ else:
 
     required_chat_cols = {"Agent Name", "Start DT", "End DT", "Duration (s)"}
     if df_chat.empty or not required_chat_cols.issubset(df_chat.columns):
-        missing = required_chat_cols - set(df_chat.columns) if not df_chat.empty else {"all columns"}
-        st.info(f"Chat transcript data unavailable or missing columns: {missing}")
+        if df_chat.empty:
+            st.warning("⚠️ chat_transcripts.csv not found. Make sure it is committed to your repository.")
+        else:
+            found_cols = list(df_chat.columns)
+            missing = required_chat_cols - set(df_chat.columns)
+            st.warning(f"⚠️ chat_transcripts.csv loaded but missing expected columns.\n\nFound: `{found_cols}`\n\nMissing: `{missing}`")
     else:
         # Filter to this agent, within the selected date range
         agent_chats = df_chat[
