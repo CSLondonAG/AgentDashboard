@@ -503,7 +503,16 @@ else:
         # Enrich with transcript/case data from chat.csv
         long_chat = enrich_long_chat_with_transcripts(long_chat, df_chat, agent)
 
-        preferred_cols = [
+# --- HARD ENFORCEMENT: Case Number must be unique ---
+if "Case Number" in long_chat.columns:
+    long_chat = (
+        long_chat
+        .sort_values("Start DT")
+        .drop_duplicates(subset=["Case Number"], keep="first")
+        .reset_index(drop=True)
+    )
+
+preferred_cols = [
             "Handle Time (mm:ss)",
             "Start DT",
             "End DT",
@@ -788,3 +797,4 @@ else:
     st.markdown("#### Absence Dates (Last 90 Days)")
     for ad in absent_days:
         st.markdown(f"- **{ad}**")
+
