@@ -13,24 +13,47 @@ try:
 except Exception:
     svg_code = ""
 
-# Custom CSS for better aesthetics and font sizes
+# Design system tokens + component styles
 st.markdown("""
     <style>
-    .stApp {
-        background-color: #f0f2f6; /* Light grey background */
+    /* ── TOKENS ─────────────────────────────────────────── */
+    :root {
+        --color-bg:            #f8f9fa;
+        --color-surface:       #ffffff;
+        --color-border:        #e5e7eb;
+        --color-text-primary:  #111827;
+        --color-text-label:    #6b7280;
+        --color-accent:        #2563eb;
+        --color-success:       #16a34a;
+        --color-warning:       #dc2626;
+        --color-warning-bg:    #fef2f2;
+        --color-warning-border:#fca5a5;
+        --shadow-card:         0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+        --radius-card:         12px;
+        --card-padding:        20px 24px;
+        --card-gap:            24px;
     }
 
+    /* ── PAGE ────────────────────────────────────────────── */
+    .stApp {
+        background-color: var(--color-bg);
+    }
+
+    /* ── HEADER ──────────────────────────────────────────── */
     .custom-main-header-container {
         display: flex;
         align-items: center;
         justify-content: flex-start;
-        margin-top: -35px;
-        margin-bottom: 0.1rem;
-        padding: 0;
+        margin-top: 0;
+        padding-top: 1rem;
+        margin-bottom: 0.25rem;
+        padding-bottom: 0;
     }
 
     .custom-main-header-container h1 {
-        font-size: 1.5rem !important;
+        font-size: 1.75rem !important;
+        font-weight: 700 !important;
+        color: var(--color-text-primary) !important;
         margin: 0 !important;
         padding: 0 !important;
         line-height: 1.2 !important;
@@ -40,12 +63,12 @@ st.markdown("""
     .header-logo-inline {
         width: 40px;
         height: auto;
-        margin-left: 10px;
+        margin-left: 12px;
         vertical-align: middle;
-        margin-top: -5px;
     }
 
-    h2 {
+    /* ── TYPOGRAPHY ──────────────────────────────────────── */
+    .main h2 {
         font-size: 0.75rem !important;
         margin-top: 0 !important;
         margin-bottom: 0.5rem !important;
@@ -53,84 +76,173 @@ st.markdown("""
         line-height: 1.2 !important;
     }
 
+    .main h3 {
+        font-size: 0.8rem !important;
+        font-weight: 600 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.06em !important;
+        color: var(--color-text-label) !important;
+        margin-top: 0 !important;
+        margin-bottom: 1rem !important;
+    }
+
+    .main h4 {
+        font-size: 0.8rem !important;
+        font-weight: 600 !important;
+        text-transform: uppercase !important;
+        letter-spacing: 0.06em !important;
+        color: var(--color-text-label) !important;
+        margin-top: 1.5rem !important;
+        margin-bottom: 0.75rem !important;
+    }
+
     .subheader-smaller {
-        font-size: 0.75rem !important;
+        font-size: 0.8125rem;
         font-weight: 500;
-        color: #444;
-        margin-bottom: 0.1rem;
+        color: var(--color-text-label);
+        margin-bottom: 1rem;
+        letter-spacing: 0.01em;
     }
 
-    h3 {
-        font-size: 1.5rem !important;
-        margin-top: 0.5rem !important;
-        margin-bottom: 0.8rem !important;
-        color: #333333;
+    /* ── DIVIDER ─────────────────────────────────────────── */
+    .section-divider {
+        border: none;
+        border-top: 1px solid var(--color-border);
+        margin: 2rem 0;
     }
 
+    /* ── METRIC CARDS ────────────────────────────────────── */
     .metric-container {
-        padding: 8px;
-        border-radius: 10px;
-        background-color: #ffffff;
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-        margin-bottom: 20px;
+        padding: var(--card-padding);
+        border-radius: var(--radius-card);
+        background-color: var(--color-surface);
+        box-shadow: var(--shadow-card);
+        border: 1px solid var(--color-border);
+        margin-bottom: var(--card-gap);
         text-align: center;
     }
+
     .metric-title {
-        font-size: 1.1em;
-        color: #333333;
-        margin-bottom: 5px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--color-text-label);
+        margin-bottom: 8px;
     }
+
     .metric-value {
-        font-size: 1.8em;
-        font-weight: bold;
-        color: #007bff;
-    }
-    .late-warning {
-        background-color: #ffebeb;
-        border: 1px solid #ff4d4d;
-        padding: 10px;
-        border-radius: 8px;
-        font-weight: bold;
-        color: #cc0000;
-        margin-top: 10px;
-    }
-    .info-box {
-        background-color: #e6f7ff;
-        border: 1px solid #91d5ff;
-        padding: 10px;
-        border-radius: 8px;
-        margin-top: 10px;
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--color-text-primary);
+        line-height: 1.1;
     }
 
-    .shift-box {
-        padding: 15px;
-        border-radius: 8px;
-        background-color: #e6f7ff;
-        border: 1px solid #91d5ff;
-        font-size: 1.5em;
-        font-weight: bold;
-        color: #007bff;
-        text-align: center;
+    .metric-value-accent {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--color-accent);
+        line-height: 1.1;
     }
 
+    .metric-value-success {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--color-success);
+        line-height: 1.1;
+    }
+
+    /* ── WARNING CARDS ───────────────────────────────────── */
     .metric-container-warning {
-        padding: 8px;
-        border-radius: 10px;
-        background-color: #ffebeb;
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-        margin-bottom: 20px;
+        padding: var(--card-padding);
+        border-radius: var(--radius-card);
+        background-color: var(--color-warning-bg);
+        box-shadow: var(--shadow-card);
+        border: 1px solid var(--color-warning-border);
+        margin-bottom: var(--card-gap);
         text-align: center;
-        border: 1px solid #ff4d4d;
     }
+
     .metric-container-warning .metric-title {
-        font-size: 1.1em;
-        color: #333333;
-        margin-bottom: 5px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--color-text-label);
+        margin-bottom: 8px;
     }
+
     .metric-container-warning .metric-value {
-        font-size: 1.8em;
-        font-weight: bold;
-        color: #ff4d4d;
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--color-warning);
+        line-height: 1.1;
+    }
+
+    /* ── LATENESS INCIDENT LIST ──────────────────────────── */
+    .incident-list {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    .incident-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 16px;
+        border-radius: 8px;
+        background-color: var(--color-surface);
+        border: 1px solid var(--color-border);
+        margin-bottom: 8px;
+    }
+
+    .incident-date {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--color-text-primary);
+    }
+
+    .incident-badge {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--color-warning);
+        background-color: var(--color-warning-bg);
+        border: 1px solid var(--color-warning-border);
+        padding: 3px 10px;
+        border-radius: 999px;
+        letter-spacing: 0.02em;
+    }
+
+    /* ── EMPTY STATES ────────────────────────────────────── */
+    .empty-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 3rem 2rem;
+        text-align: center;
+    }
+
+    .empty-state-label {
+        margin-top: 1rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--color-text-label);
+        letter-spacing: 0.02em;
+    }
+
+    /* ── SHIFT BOX (retained, cleaned up) ───────────────── */
+    .shift-box {
+        padding: var(--card-padding);
+        border-radius: var(--radius-card);
+        background-color: var(--color-surface);
+        border: 1px solid var(--color-border);
+        font-size: 1.5em;
+        font-weight: 700;
+        color: var(--color-accent);
+        text-align: center;
+        box-shadow: var(--shadow-card);
     }
 
     </style>
@@ -296,7 +408,6 @@ agents_to_remove = [
 
 agents = [a for a in agents if a not in agents_to_remove]
 
-st.sidebar.header("Select Agent and Date Range")
 agent = st.sidebar.selectbox("Agent Name", agents)
 
 # Build list of all dates we have presence data for
@@ -347,7 +458,7 @@ st.markdown(
     f"""<div class='subheader-smaller'>Date range: {date_label}</div>""",
     unsafe_allow_html=True,
 )
-st.markdown("---")
+st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
 
 # -----------------------------
 # Filter data to agent + range
@@ -395,15 +506,24 @@ for d in day_list:
 # High-level conditional view
 # -----------------------------
 if not has_scheduled_shift and df_presence_agent_range.empty:
-    st.image("day_off.png", caption="No Shifts Scheduled in this Date Range", width=300)
-    st.info("You were not scheduled to work on any of the selected days.")
+    st.markdown("""
+        <div class="empty-state">
+            <img src="app/static/day_off.png" width="220" style="opacity:0.85;" />
+            <div class="empty-state-label">No shifts scheduled in this date range</div>
+        </div>
+    """, unsafe_allow_html=True)
 elif has_scheduled_shift and df_presence_agent_range.empty:
-    st.image("absent.png", caption="Absent for all Scheduled Shifts in this Date Range", width=300)
+    st.markdown("""
+        <div class="empty-state">
+            <img src="app/static/absent.png" width="220" style="opacity:0.85;" />
+            <div class="empty-state-label">Absent for all scheduled shifts in this date range</div>
+        </div>
+    """, unsafe_allow_html=True)
 else:
     # =========================================================
     # AHT & Volume – Selected Range
     # =========================================================
-    st.markdown("### Average Handling Time (AHT) & Volume – Selected Range")
+    st.markdown("### Average Handling Time & Volume")
 
     df_range_items = df_items_agent_range.copy()
     df_range_items["Duration"] = (df_range_items["End DT"] - df_range_items["Start DT"]).dt.total_seconds()
@@ -425,24 +545,25 @@ else:
     total_available_minutes = 0
     total_handling_minutes = 0
 
-    for t in minutes:
-        pres_at_t = df_presence_agent_range[
-            (df_presence_agent_range["Start DT"] <= t)
-            & (df_presence_agent_range["End DT"] > t)
-        ]
-        status = pres_at_t.iloc[0]["Service Presence Status: Developer Name"] if not pres_at_t.empty else None
+    with st.spinner("Calculating utilisation…"):
+        for t in minutes:
+            pres_at_t = df_presence_agent_range[
+                (df_presence_agent_range["Start DT"] <= t)
+                & (df_presence_agent_range["End DT"] > t)
+            ]
+            status = pres_at_t.iloc[0]["Service Presence Status: Developer Name"] if not pres_at_t.empty else None
 
-        if status in ("Available_Chat", "Available_Email_and_Web", "Available_All"):
-            total_available_minutes += 1
+            if status in ("Available_Chat", "Available_Email_and_Web", "Available_All"):
+                total_available_minutes += 1
 
-            is_handling = not df_items_agent_range[
-                (df_items_agent_range["Service Channel: Developer Name"].isin(["sfdc_liveagent", "casesChannel"]))
-                & (df_items_agent_range["Start DT"] <= t)
-                & (df_items_agent_range["End DT"] > t)
-            ].empty
+                is_handling = not df_items_agent_range[
+                    (df_items_agent_range["Service Channel: Developer Name"].isin(["sfdc_liveagent", "casesChannel"]))
+                    & (df_items_agent_range["Start DT"] <= t)
+                    & (df_items_agent_range["End DT"] > t)
+                ].empty
 
-            if is_handling:
-                total_handling_minutes += 1
+                if is_handling:
+                    total_handling_minutes += 1
 
     shift_utilization = total_handling_minutes / total_available_minutes if total_available_minutes > 0 else 0.0
 
@@ -451,8 +572,8 @@ else:
         st.markdown(f"""
             <div class="metric-container">
                 <div class="metric-title">AHT Chat (mm:ss)</div>
-                <div class="metric-value">{format_seconds_to_mm_ss(aht_chat) if aht_chat is not None else "–"}</div>
-                <div class="metric-title"># Chat Items</div>
+                <div class="metric-value-accent">{format_seconds_to_mm_ss(aht_chat) if aht_chat is not None else "–"}</div>
+                <div class="metric-title" style="margin-top:12px;">Chat Items</div>
                 <div class="metric-value">{num_chat_items}</div>
             </div>
         """, unsafe_allow_html=True)
@@ -461,24 +582,24 @@ else:
         st.markdown(f"""
             <div class="metric-container">
                 <div class="metric-title">AHT Email (mm:ss)</div>
-                <div class="metric-value">{format_seconds_to_mm_ss(aht_email) if aht_email is not None else "–"}</div>
-                <div class="metric-title"># Email Items</div>
+                <div class="metric-value-accent">{format_seconds_to_mm_ss(aht_email) if aht_email is not None else "–"}</div>
+                <div class="metric-title" style="margin-top:12px;">Email Items</div>
                 <div class="metric-value">{num_email_items}</div>
             </div>
         """, unsafe_allow_html=True)
 
     st.markdown(f"""
         <div class="metric-container">
-            <div class="metric-title">Shift Utilization (Selected Range)</div>
-            <div class="metric-value">{shift_utilization:.1%}</div>
+            <div class="metric-title">Shift Utilisation</div>
+            <div class="metric-value-accent">{shift_utilization:.1%}</div>
         </div>
     """, unsafe_allow_html=True)
 
     # =========================================================
     # Long Chat Handles (>= 15 minutes) – table with chat.csv enrichment
     # =========================================================
-    st.markdown("---")
-    st.markdown("### Long Chat Handles (≥ 15 minutes) – Selected Range")
+    st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+    st.markdown("### Long Chat Handles (≥ 15 min)")
 
     # Start from this agent's chat items
     agent_chat_items = chat_items.copy()
@@ -534,14 +655,10 @@ else:
             cols_present = ["Handle Time (mm:ss)"] + [c for c in cols_present if c != "Handle Time (mm:ss)"]
 
         display_df = long_chat[cols_present] if cols_present else long_chat
-        st.dataframe(display_df, use_container_width=True)
+        st.dataframe(display_df, use_container_width=True, hide_index=True)
 
-    st.markdown("---")
-
-    # =========================================================
-    # Daily Overview – Selected Range
-    # =========================================================
-    st.markdown("### Daily Overview – Selected Range")
+    st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+    st.markdown("### Daily Overview")
 
     total_shift_seconds = 0
     total_available_seconds = 0
@@ -607,36 +724,38 @@ else:
     col3, col4, col5 = st.columns(3)
     with col3:
         box_class = "metric-container-warning" if lunch_warning else "metric-container"
+        val_class = "metric-value" if lunch_warning else "metric-value-success"
         st.markdown(f"""
             <div class="{box_class}">
                 <div class="metric-title">Lunch Compliance</div>
-                <div class="metric-value">{lunch_text}</div>
+                <div class="{val_class}">{lunch_text}</div>
             </div>
         """, unsafe_allow_html=True)
 
     with col4:
         st.markdown(f"""
             <div class="metric-container">
-                <div class="metric-title">Total Shift Time (All Worked Days)</div>
+                <div class="metric-title">Total Shift Time</div>
                 <div class="metric-value">{total_shift_display}</div>
             </div>
         """, unsafe_allow_html=True)
 
     with col5:
         box_class = "metric-container-warning" if availability_warning else "metric-container"
+        val_class = "metric-value" if availability_warning else "metric-value-success"
         st.markdown(f"""
             <div class="{box_class}">
                 <div class="metric-title">Total Available Time</div>
-                <div class="metric-value">{total_available_display}</div>
+                <div class="{val_class}">{total_available_display}</div>
             </div>
         """, unsafe_allow_html=True)
 
-    st.markdown("---")
+    st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
 
     # =========================================================
     # Per-Day Shift & Adherence – Selected Range
     # =========================================================
-    st.markdown("### Per-Day Shift & Adherence (Selected Range)")
+    st.markdown("### Per-Day Shift & Adherence")
 
     per_day_rows = []
 
@@ -697,15 +816,15 @@ else:
         per_day_df = pd.DataFrame(per_day_rows)
         # Coerce Late (min) to string to avoid Arrow int/str mix issues
         per_day_df["Late (min)"] = per_day_df["Late (min)"].astype(str)
-        st.dataframe(per_day_df, use_container_width=True)
+        st.dataframe(per_day_df, use_container_width=True, hide_index=True)
     else:
         st.info("No per-day shift data available for this range.")
 
 # =========================================================
 # Lateness – Last 30 Days (from end of selected range)
 # =========================================================
-st.markdown("---")
-st.markdown("### Lateness – Last 30 Days (from end of selected range)")
+st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+st.markdown("### Lateness – Last 30 Days")
 
 anchor_date = end_date if isinstance(end_date, date_type) else pd.to_datetime(end_date).date()
 
@@ -740,27 +859,32 @@ for d in window_days:
                 )
 
 if not lateness_incidents:
-    st.image("no_late.png", caption="No Lateness Incidents Recorded (Last 30 Days)", width=300)
+    st.markdown("""
+        <div class="empty-state">
+            <div class="empty-state-label">No lateness incidents in the last 30 days</div>
+        </div>
+    """, unsafe_allow_html=True)
 else:
     st.markdown(f"""
-        <div class="metric-container">
-            <div class="metric-title">Total Lateness (Last 30 Days)</div>
-            <div class="metric-value">
-                {int(total_minutes_late)} min late
-                {'<span style="color:red; font-size: 0.7em;"> &#x26A0;</span>' if total_minutes_late > 0 else ''}
-            </div>
+        <div class="metric-container-warning">
+            <div class="metric-title">Total Lateness – Last 30 Days</div>
+            <div class="metric-value">{int(total_minutes_late)} min</div>
         </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("#### Incidents of Lateness (Last 30 Days)")
-    for incident in lateness_incidents:
-        st.markdown(incident)
+    st.markdown("#### Lateness Incidents")
+    items_html = "\n".join([
+        f'<li class="incident-item"><span class="incident-date">{inc.split("**: ")[0].replace("- **", "")}</span>'
+        f'<span class="incident-badge">{inc.split("**: ")[1]}</span></li>'
+        for inc in lateness_incidents
+    ])
+    st.markdown(f'<ul class="incident-list">{items_html}</ul>', unsafe_allow_html=True)
 
 # =========================================================
 # Absence – Last 90 Days (from end of selected range)
 # =========================================================
-st.markdown("---")
-st.markdown("### Absence – Last 90 Days (from end of selected range)")
+st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+st.markdown("### Absence – Last 90 Days")
 
 abs_window = [anchor_date - timedelta(days=i) for i in range(1, 91)]
 absent_days = []
@@ -787,15 +911,23 @@ for d in abs_window:
         absent_days.append(d.strftime("%d %b %Y"))
 
 if not absent_days:
-    st.image("no_late.png", caption="No Absences in the Last 90 Days", width=300)
+    st.markdown("""
+        <div class="empty-state">
+            <div class="empty-state-label">No absences in the last 90 days</div>
+        </div>
+    """, unsafe_allow_html=True)
 else:
     st.markdown(f"""
         <div class="metric-container-warning">
-            <div class="metric-title">Absence Count (Last 90 Days)</div>
+            <div class="metric-title">Absence Count – Last 90 Days</div>
             <div class="metric-value">{len(absent_days)}</div>
         </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("#### Absence Dates (Last 90 Days)")
-    for ad in absent_days:
-        st.markdown(f"- **{ad}**")
+    st.markdown("#### Absence Dates")
+    items_html = "\n".join([
+        f'<li class="incident-item"><span class="incident-date">{ad}</span>'
+        f'<span class="incident-badge">Absent</span></li>'
+        for ad in absent_days
+    ])
+    st.markdown(f'<ul class="incident-list">{items_html}</ul>', unsafe_allow_html=True)
