@@ -231,7 +231,7 @@ def enrich_long_chat_with_transcripts(long_chat_df, chat_df, agent_name, max_dif
     if "Owner: Full Name" not in chat_df.columns or "Date/Time Opened DT" not in chat_df.columns:
         return long_chat_df
 
-    # Only consider this agent’s chats
+    # Only consider this agent's chats
     chat_agent = chat_df[chat_df["Owner: Full Name"] == agent_name].copy()
     if chat_agent.empty:
         return long_chat_df
@@ -487,7 +487,7 @@ else:
     if "User: Full Name" in agent_chat_items.columns:
         agent_chat_items = agent_chat_items[agent_chat_items["User: Full Name"] == agent]
 
-    # NEW: Deduplicate identical chat rows (prevents duplicated long chats)
+    # Deduplicate identical chat rows (prevents duplicated long chats)
     agent_chat_items = agent_chat_items.drop_duplicates(
         subset=["User: Full Name", "Start DT", "End DT", "Duration"],
         keep="first"
@@ -501,18 +501,18 @@ else:
         long_chat["Handle Time (mm:ss)"] = long_chat["Duration"].apply(format_seconds_to_mm_ss)
 
         # Enrich with transcript/case data from chat.csv
-long_chat = enrich_long_chat_with_transcripts(long_chat, df_chat, agent)
+        long_chat = enrich_long_chat_with_transcripts(long_chat, df_chat, agent)
 
-# --- HARD ENFORCEMENT: Case Number must be unique ---
-if "Case Number" in long_chat.columns:
-    long_chat = (
-        long_chat
-        .sort_values("Start DT")
-        .drop_duplicates(subset=["Case Number"], keep="first")
-        .reset_index(drop=True)
-    )
+        # --- HARD ENFORCEMENT: Case Number must be unique ---
+        if "Case Number" in long_chat.columns:
+            long_chat = (
+                long_chat
+                .sort_values("Start DT")
+                .drop_duplicates(subset=["Case Number"], keep="first")
+                .reset_index(drop=True)
+            )
 
-preferred_cols = [
+        preferred_cols = [
             "Handle Time (mm:ss)",
             "Start DT",
             "End DT",
@@ -528,13 +528,13 @@ preferred_cols = [
             "Service Channel: Developer Name",
         ]
 
-cols_present = [c for c in preferred_cols if c in long_chat.columns]
+        cols_present = [c for c in preferred_cols if c in long_chat.columns]
 
-if "Handle Time (mm:ss)" in cols_present:
+        if "Handle Time (mm:ss)" in cols_present:
             cols_present = ["Handle Time (mm:ss)"] + [c for c in cols_present if c != "Handle Time (mm:ss)"]
 
-display_df = long_chat[cols_present] if cols_present else long_chat
-st.dataframe(display_df, width="stretch")
+        display_df = long_chat[cols_present] if cols_present else long_chat
+        st.dataframe(display_df, use_container_width=True)
 
     st.markdown("---")
 
@@ -697,7 +697,7 @@ st.dataframe(display_df, width="stretch")
         per_day_df = pd.DataFrame(per_day_rows)
         # Coerce Late (min) to string to avoid Arrow int/str mix issues
         per_day_df["Late (min)"] = per_day_df["Late (min)"].astype(str)
-        st.dataframe(per_day_df, width="stretch")
+        st.dataframe(per_day_df, use_container_width=True)
     else:
         st.info("No per-day shift data available for this range.")
 
@@ -799,6 +799,3 @@ else:
     st.markdown("#### Absence Dates (Last 90 Days)")
     for ad in absent_days:
         st.markdown(f"- **{ad}**")
-
-
-
