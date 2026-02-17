@@ -596,66 +596,116 @@ else:
     """, unsafe_allow_html=True)
 
     # =========================================================
-    # Long Chat Handles (>= 15 minutes) – table with chat.csv enrichment
+    # Long Chat Handles (>= 15 minutes)
+    # =========================================================
+    # Salesforce Agent Work logs one row per status segment, not per
+    # conversation. A single chat can produce several consecutive rows
+    # (e.g. the agent briefly changes status mid-conversation).
+    # We collapse those fragments into conversations by grouping
+    # segments where the gap to the next segment is ≤ 2 minutes,
+    # then summing their durations to get a true handle time.
     # =========================================================
     st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
     st.markdown("### Long Chat Handles (≥ 15 min)")
 
-    # Start from this agent's chat items
-    agent_chat_items = chat_items.copy()
+    SEGMENT_GAP_THRESHOLD = pd.Timedelta(minutes=2)
+    LONG_CHAT_THRESHOLD_SECONDS = 15 * 60
 
-    # Extra defensive filter: ensure only this agent
+    # Work from this agent's chat segments, sorted by start time
+    agent_chat_items = chat_items.copy()
     if "User: Full Name" in agent_chat_items.columns:
         agent_chat_items = agent_chat_items[agent_chat_items["User: Full Name"] == agent]
 
-    # Deduplicate identical chat rows (prevents duplicated long chats)
-    agent_chat_items = agent_chat_items.drop_duplicates(
-        subset=["User: Full Name", "Start DT", "End DT", "Duration"],
-        keep="first"
+    agent_chat_items = (
+        agent_chat_items
+        .drop_duplicates(subset=["User: Full Name", "Start DT", "End DT", "Duration"])
+        .sort_values("Start DT")
+        .reset_index(drop=True)
     )
 
-    long_chat = agent_chat_items[agent_chat_items["Duration"] >= 15 * 60].copy()
-
-    if long_chat.empty:
-        st.info("No chat items with a handle time of 15 minutes or more in the selected range.")
+    if agent_chat_items.empty:
+        st.info("No chat items in the selected range.")
     else:
-        long_chat["Handle Time (mm:ss)"] = long_chat["Duration"].apply(format_seconds_to_mm_ss)
+        # ── Group consecutive segments into conversations ──────────
+        # A new conversation starts when the gap from the previous
+        # segment's End DT exceeds SEGMENT_GAP_THRESHOLD.
+        conversations = []
+        if not agent_chat_items.empty:
+            current_start   = agent_chat_items.loc[0, "Start DT"]
+            current_end     = agent_chat_items.loc[0, "End DT"]
+            current_dur     = agent_chat_items.loc[0, "Duration"]
 
-        # Enrich with transcript/case data from chat.csv
-        long_chat = enrich_long_chat_with_transcripts(long_chat, df_chat, agent)
+            for i in range(1, len(agent_chat_items)):
+                row = agent_chat_items.loc[i]
+                gap = row["Start DT"] - current_end
 
-        # --- HARD ENFORCEMENT: Case Number must be unique ---
-        if "Case Number" in long_chat.columns:
-            long_chat = (
-                long_chat
-                .sort_values("Start DT")
-                .drop_duplicates(subset=["Case Number"], keep="first")
-                .reset_index(drop=True)
+                if gap <= SEGMENT_GAP_THRESHOLD:
+                    # Same conversation — extend the window and add duration
+                    current_end  = max(current_end, row["End DT"])
+                    current_dur += row["Duration"]
+                else:
+                    # New conversation — save the previous one
+                    conversations.append({
+                        "Conv Start": current_start,
+                        "Conv End":   current_end,
+                        "Total Duration (s)": current_dur,
+                    })
+                    current_start = row["Start DT"]
+                    current_end   = row["End DT"]
+                    current_dur   = row["Duration"]
+
+            # Save the final conversation
+            conversations.append({
+                "Conv Start": current_start,
+                "Conv End":   current_end,
+                "Total Duration (s)": current_dur,
+            })
+
+        conv_df = pd.DataFrame(conversations)
+
+        # ── Filter to long conversations ───────────────────────────
+        long_conv = conv_df[
+            conv_df["Total Duration (s)"] >= LONG_CHAT_THRESHOLD_SECONDS
+        ].copy().reset_index(drop=True)
+
+        if long_conv.empty:
+            st.info("No chat conversations with a handle time of 15 minutes or more in the selected range.")
+        else:
+            long_conv["Handle Time (mm:ss)"] = long_conv["Total Duration (s)"].apply(
+                format_seconds_to_mm_ss
             )
 
-        preferred_cols = [
-            "Handle Time (mm:ss)",
-            "Start DT",
-            "End DT",
-            "Duration",
-            # From chat.csv:
-            "Case Number",
-            "Visitor Email",
-            "Chat Button: Developer Name",
-            "Wait Time",
-            "Abandoned After",
-            # Optional other context fields if present:
-            "Queue: Name",
-            "Service Channel: Developer Name",
-        ]
+            # ── Enrich from chat.csv using Conv Start as the anchor ─
+            # Re-use the existing enrichment function by temporarily
+            # aliasing Conv Start → Start DT so the function can match
+            long_conv_for_enrich = long_conv.rename(columns={"Conv Start": "Start DT"})
+            long_conv_enriched = enrich_long_chat_with_transcripts(
+                long_conv_for_enrich, df_chat, agent
+            )
+            # Restore the display column name
+            long_conv_enriched = long_conv_enriched.rename(columns={"Start DT": "Conv Start"})
 
-        cols_present = [c for c in preferred_cols if c in long_chat.columns]
+            # Drop duplicate Case Numbers — keep the earliest conversation
+            if "Case Number" in long_conv_enriched.columns:
+                long_conv_enriched = (
+                    long_conv_enriched
+                    .sort_values("Conv Start")
+                    .drop_duplicates(subset=["Case Number"], keep="first")
+                    .reset_index(drop=True)
+                )
 
-        if "Handle Time (mm:ss)" in cols_present:
-            cols_present = ["Handle Time (mm:ss)"] + [c for c in cols_present if c != "Handle Time (mm:ss)"]
-
-        display_df = long_chat[cols_present] if cols_present else long_chat
-        st.dataframe(display_df, use_container_width=True, hide_index=True)
+            display_cols = [
+                "Handle Time (mm:ss)",
+                "Conv Start",
+                "Conv End",
+                "Case Number",
+                "Visitor Email",
+                "Chat Button: Developer Name",
+                "Wait Time",
+            ]
+            cols_present = [c for c in display_cols if c in long_conv_enriched.columns]
+            display_df = long_conv_enriched[cols_present] if cols_present else long_conv_enriched
+            st.dataframe(display_df, use_container_width=True, hide_index=True)
 
     st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
     st.markdown("### Daily Overview")
