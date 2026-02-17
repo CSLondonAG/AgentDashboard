@@ -288,18 +288,21 @@ def load_data():
     # Chat transcripts — one row per conversation, with exact start/end times
     df_chat = safe_read_csv("chat_transcripts.csv")
     if not df_chat.empty:
-        # Strip BOM and whitespace from every column name unconditionally
-        df_chat.columns = (
-            df_chat.columns
-            .str.encode("utf-8").str.decode("utf-8-sig")  # removes BOM if present
-            .str.strip()
-        )
-        # Normalise to consistent internal column names regardless of source variation
-        df_chat.rename(columns={
-            "Case: Case Number": "Case Number",
-            "Owner: Full Name":  "Agent Name",
-        }, inplace=True)
-        # Use "Agent Name" internally to avoid any colon/space ambiguity
+        # Brute-force clean every column name: remove BOM, strip whitespace,
+        # then build a lookup that matches regardless of BOM or encoding quirks
+        clean = {col: col.encode("utf-8").decode("utf-8-sig").strip() for col in df_chat.columns}
+        df_chat.rename(columns=clean, inplace=True)
+
+        # Now find the agent column — it may be "Owner: Full Name" or a BOM variant
+        agent_col = next((c for c in df_chat.columns if "Full Name" in c), None)
+        if agent_col and agent_col != "Agent Name":
+            df_chat.rename(columns={agent_col: "Agent Name"}, inplace=True)
+
+        # Normalise Case Number column
+        case_col = next((c for c in df_chat.columns if "Case Number" in c), None)
+        if case_col and case_col != "Case Number":
+            df_chat.rename(columns={case_col: "Case Number"}, inplace=True)
+
         if "Agent Name" in df_chat.columns:
             df_chat["Agent Name"] = df_chat["Agent Name"].astype(str).str.strip()
         if "Start Time" in df_chat.columns:
@@ -563,8 +566,10 @@ else:
 
     LONG_CHAT_THRESHOLD_SECONDS = 15 * 60
 
-    if df_chat.empty:
-        st.info("No chat transcript data available (chat_transcripts.csv not found or empty).")
+    required_chat_cols = {"Agent Name", "Start DT", "End DT", "Duration (s)"}
+    if df_chat.empty or not required_chat_cols.issubset(df_chat.columns):
+        missing = required_chat_cols - set(df_chat.columns) if not df_chat.empty else {"all columns"}
+        st.info(f"Chat transcript data unavailable or missing columns: {missing}")
     else:
         # Filter to this agent, within the selected date range
         agent_chats = df_chat[
