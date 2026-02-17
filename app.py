@@ -288,13 +288,20 @@ def load_data():
     # Chat transcripts — one row per conversation, with exact start/end times
     df_chat = safe_read_csv("chat_transcripts.csv")
     if not df_chat.empty:
-        # Strip BOM characters or whitespace from column names on load
-        df_chat.columns = df_chat.columns.str.strip().str.lstrip("\ufeff")
-        # Normalise Case: Case Number → Case Number before any other access
-        if "Case: Case Number" in df_chat.columns:
-            df_chat.rename(columns={"Case: Case Number": "Case Number"}, inplace=True)
-        if "Owner: Full Name" in df_chat.columns:
-            df_chat["Owner: Full Name"] = df_chat["Owner: Full Name"].astype(str).str.strip()
+        # Strip BOM and whitespace from every column name unconditionally
+        df_chat.columns = (
+            df_chat.columns
+            .str.encode("utf-8").str.decode("utf-8-sig")  # removes BOM if present
+            .str.strip()
+        )
+        # Normalise to consistent internal column names regardless of source variation
+        df_chat.rename(columns={
+            "Case: Case Number": "Case Number",
+            "Owner: Full Name":  "Agent Name",
+        }, inplace=True)
+        # Use "Agent Name" internally to avoid any colon/space ambiguity
+        if "Agent Name" in df_chat.columns:
+            df_chat["Agent Name"] = df_chat["Agent Name"].astype(str).str.strip()
         if "Start Time" in df_chat.columns:
             df_chat["Start DT"] = pd.to_datetime(df_chat["Start Time"], format="%d/%m/%Y, %H:%M", errors="coerce")
         if "End Time" in df_chat.columns:
@@ -561,7 +568,7 @@ else:
     else:
         # Filter to this agent, within the selected date range
         agent_chats = df_chat[
-            (df_chat["Owner: Full Name"] == agent) &
+            (df_chat["Agent Name"] == agent) &
             (df_chat["Start DT"].dt.date >= start_date) &
             (df_chat["Start DT"].dt.date <= end_date)
         ].copy()
