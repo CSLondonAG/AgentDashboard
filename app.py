@@ -501,7 +501,7 @@ else:
         long_chat["Handle Time (mm:ss)"] = long_chat["Duration"].apply(format_seconds_to_mm_ss)
 
         # Enrich with transcript/case data from chat.csv
-        long_chat = enrich_long_chat_with_transcripts(long_chat, df_chat, agent)
+long_chat = enrich_long_chat_with_transcripts(long_chat, df_chat, agent)
 
 # --- HARD ENFORCEMENT: Case Number must be unique ---
 if "Case Number" in long_chat.columns:
@@ -797,4 +797,5 @@ else:
     st.markdown("#### Absence Dates (Last 90 Days)")
     for ad in absent_days:
         st.markdown(f"- **{ad}**")
+
 
