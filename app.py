@@ -527,12 +527,14 @@ preferred_cols = [
             "Queue: Name",
             "Service Channel: Developer Name",
         ]
-        cols_present = [c for c in preferred_cols if c in long_chat.columns]
-        if "Handle Time (mm:ss)" in cols_present:
+
+cols_present = [c for c in preferred_cols if c in long_chat.columns]
+
+if "Handle Time (mm:ss)" in cols_present:
             cols_present = ["Handle Time (mm:ss)"] + [c for c in cols_present if c != "Handle Time (mm:ss)"]
 
-        display_df = long_chat[cols_present] if cols_present else long_chat
-        st.dataframe(display_df, width="stretch")
+display_df = long_chat[cols_present] if cols_present else long_chat
+st.dataframe(display_df, width="stretch")
 
     st.markdown("---")
 
@@ -797,5 +799,6 @@ else:
     st.markdown("#### Absence Dates (Last 90 Days)")
     for ad in absent_days:
         st.markdown(f"- **{ad}**")
+
 
 
