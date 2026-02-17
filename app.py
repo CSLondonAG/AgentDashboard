@@ -288,18 +288,25 @@ def load_data():
     # Chat transcripts — one row per conversation, with exact start/end times
     df_chat = safe_read_csv("chat_transcripts.csv")
     if not df_chat.empty:
-        df_chat["Owner: Full Name"] = df_chat["Owner: Full Name"].astype(str).str.strip()
-        df_chat["Start DT"] = pd.to_datetime(df_chat["Start Time"], format="%d/%m/%Y, %H:%M", errors="coerce")
-        df_chat["End DT"]   = pd.to_datetime(df_chat["End Time"],   format="%d/%m/%Y, %H:%M", errors="coerce")
-        # Duration in seconds — drop zero/null durations (abandoned before answer)
-        df_chat["Duration (s)"] = (df_chat["End DT"] - df_chat["Start DT"]).dt.total_seconds()
-        df_chat = df_chat[
-            df_chat["Start DT"].notna() &
-            df_chat["End DT"].notna() &
-            (df_chat["Duration (s)"] > 0)
-        ].copy()
+        # Strip BOM characters or whitespace from column names on load
+        df_chat.columns = df_chat.columns.str.strip().str.lstrip("\ufeff")
+        # Normalise Case: Case Number → Case Number before any other access
         if "Case: Case Number" in df_chat.columns:
             df_chat.rename(columns={"Case: Case Number": "Case Number"}, inplace=True)
+        if "Owner: Full Name" in df_chat.columns:
+            df_chat["Owner: Full Name"] = df_chat["Owner: Full Name"].astype(str).str.strip()
+        if "Start Time" in df_chat.columns:
+            df_chat["Start DT"] = pd.to_datetime(df_chat["Start Time"], format="%d/%m/%Y, %H:%M", errors="coerce")
+        if "End Time" in df_chat.columns:
+            df_chat["End DT"] = pd.to_datetime(df_chat["End Time"], format="%d/%m/%Y, %H:%M", errors="coerce")
+        if "Start DT" in df_chat.columns and "End DT" in df_chat.columns:
+            df_chat["Duration (s)"] = (df_chat["End DT"] - df_chat["Start DT"]).dt.total_seconds()
+            # Drop abandoned chats (zero/null duration — visitor left before agent responded)
+            df_chat = df_chat[
+                df_chat["Start DT"].notna() &
+                df_chat["End DT"].notna() &
+                (df_chat["Duration (s)"] > 0)
+            ].copy()
 
     return df_items, df_presence, df_shifts, df_chat
 
