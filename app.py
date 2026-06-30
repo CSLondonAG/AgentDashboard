@@ -337,16 +337,83 @@ if df_presence.empty or df_items.empty or df_shifts.empty:
 # -----------------------------
 # Utility functions
 # -----------------------------
+def normalise_shift_value(value):
+    """Return a clean shift/event string from the rota cell."""
+    if pd.isna(value):
+        return ""
+    return " ".join(str(value).replace("\n", " ").strip().split())
+
+
+def get_shift_value(agent_shift_row, shift_col):
+    if agent_shift_row.empty or shift_col not in df_shifts.columns:
+        return ""
+    return normalise_shift_value(agent_shift_row[shift_col].values[0])
+
+
+def is_not_assigned_shift(shift_str):
+    text = normalise_shift_value(shift_str).lower()
+    return text in {"", "nan", "not assigned", "n/a", "na", "day off", "off"}
+
+
+def is_sick_shift(shift_str):
+    text = normalise_shift_value(shift_str).lower()
+    return any(word in text for word in ["sick", "sickness", "illness", "ill"])
+
+
+def is_manual_late_shift(shift_str):
+    text = normalise_shift_value(shift_str).lower()
+    return "late" in text
+
+
 def parse_shift_range(shift_str, base_date):
-    if not shift_str or " - " not in shift_str:
+    """Parse rota shifts like '7:00 AM - 4:00 PM', even if notes/newlines are present."""
+    import re
+
+    text = normalise_shift_value(shift_str)
+    if not text:
         return None, None
-    try:
-        start_str, end_str = shift_str.split(" - ")
-        start_time = datetime.strptime(start_str.strip().upper(), "%I:%M %p").time()
-        end_time = datetime.strptime(end_str.strip().upper(), "%I:%M %p").time()
-        return datetime.combine(base_date, start_time), datetime.combine(base_date, end_time)
-    except Exception:
+
+    # Accept both hyphen and en dash separators, and ignore notes such as Sick/Late after the times.
+    matches = re.findall(r"\b(\d{1,2}:\d{2}\s*(?:AM|PM)?)\b", text, flags=re.IGNORECASE)
+    if len(matches) < 2:
         return None, None
+
+    parsed_times = []
+    for part in matches[:2]:
+        part = part.strip().upper().replace(" ", "")
+        for fmt in ("%I:%M%p", "%H:%M"):
+            try:
+                parsed_times.append(datetime.strptime(part, fmt).time())
+                break
+            except ValueError:
+                continue
+
+    if len(parsed_times) < 2:
+        return None, None
+
+    start_dt = datetime.combine(base_date, parsed_times[0])
+    end_dt = datetime.combine(base_date, parsed_times[1])
+    if end_dt <= start_dt:
+        end_dt += timedelta(days=1)
+    return start_dt, end_dt
+
+
+def has_shift_time(shift_str, base_date):
+    sched_start, sched_end = parse_shift_range(shift_str, base_date)
+    return sched_start is not None and sched_end is not None
+
+
+def classify_rota_day(shift_str, base_date):
+    shift_str = normalise_shift_value(shift_str)
+    if is_not_assigned_shift(shift_str):
+        return "not_assigned"
+    if is_sick_shift(shift_str):
+        return "sick"
+    if has_shift_time(shift_str, base_date):
+        return "scheduled"
+    if is_manual_late_shift(shift_str):
+        return "manual_late"
+    return "other_event"
 
 
 def format_seconds_to_mm_ss(total_seconds):
@@ -459,18 +526,30 @@ day_list = [
 # Check schedule in range
 agent_shift_row = df_shifts[df_shifts["Agent Name"].str.lower() == agent.lower()] if "Agent Name" in df_shifts.columns else pd.DataFrame()
 has_scheduled_shift = False
+has_sick_event = False
 for d in day_list:
     shift_col = d.strftime("%d/%m/%Y")
-    if not agent_shift_row.empty and shift_col in df_shifts.columns:
-        val = agent_shift_row[shift_col].values[0]
-        if pd.notna(val) and str(val).strip() != "" and str(val).strip().lower() != "not assigned":
-            has_scheduled_shift = True
-            break
+    sched_shift = get_shift_value(agent_shift_row, shift_col)
+    day_type = classify_rota_day(sched_shift, d)
+    if day_type == "scheduled":
+        has_scheduled_shift = True
+    elif day_type == "sick":
+        has_sick_event = True
+
+    if has_scheduled_shift and has_sick_event:
+        break
 
 # -----------------------------
 # High-level conditional view
 # -----------------------------
-if not has_scheduled_shift and df_presence_agent_range.empty:
+if has_sick_event and not has_scheduled_shift and df_presence_agent_range.empty:
+    st.markdown("""
+        <div class="empty-state">
+            <img src="app/static/absent.png" width="220" style="opacity:0.85;" />
+            <div class="empty-state-label">Sickness recorded in this date range</div>
+        </div>
+    """, unsafe_allow_html=True)
+elif not has_scheduled_shift and df_presence_agent_range.empty:
     st.markdown("""
         <div class="empty-state">
             <img src="app/static/day_off.png" width="220" style="opacity:0.85;" />
@@ -611,7 +690,7 @@ else:
             cols_present = [c for c in display_cols if c in long_chats.columns]
             st.dataframe(
                 long_chats[cols_present],
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
             )
 
@@ -719,17 +798,20 @@ else:
 
     for d in day_list:
         shift_col = d.strftime("%d/%m/%Y")
-        if not agent_shift_row.empty and shift_col in df_shifts.columns:
-            sched_val = agent_shift_row[shift_col].values[0]
-            sched_shift = str(sched_val).strip() if pd.notna(sched_val) else ""
-        else:
-            sched_shift = ""
+        sched_shift = get_shift_value(agent_shift_row, shift_col)
+        day_type = classify_rota_day(sched_shift, d)
 
         agent_daily = df_presence_agent_range[df_presence_agent_range["Start DT"].dt.date == d].copy()
 
         if agent_daily.empty:
-            if sched_shift and sched_shift.lower() != "not assigned":
+            if day_type == "sick":
+                status = "Sick"
+            elif day_type == "scheduled":
                 status = "Absent (Scheduled)"
+            elif day_type == "manual_late":
+                status = "Late (Recorded)"
+            elif day_type == "other_event":
+                status = sched_shift
             else:
                 status = "Day Off / Not Assigned"
             per_day_rows.append(
@@ -750,7 +832,11 @@ else:
         late_minutes = ""
         status = "Worked"
 
-        if sched_shift and sched_shift.lower() != "not assigned":
+        if day_type == "sick":
+            status = "Sick (worked)"
+        elif day_type == "manual_late":
+            status = "Late (Recorded)"
+        elif day_type == "scheduled":
             sched_start, _ = parse_shift_range(sched_shift, d)
             if sched_start:
                 delay = (earliest - sched_start).total_seconds() / 60
@@ -774,7 +860,7 @@ else:
         per_day_df = pd.DataFrame(per_day_rows)
         # Coerce Late (min) to string to avoid Arrow int/str mix issues
         per_day_df["Late (min)"] = per_day_df["Late (min)"].astype(str)
-        st.dataframe(per_day_df, use_container_width=True, hide_index=True)
+        st.dataframe(per_day_df, width="stretch", hide_index=True)
     else:
         st.info("No per-day shift data available for this range.")
 
@@ -787,25 +873,28 @@ st.markdown("### Lateness – Last 30 Days")
 anchor_date = end_date if isinstance(end_date, date_type) else pd.to_datetime(end_date).date()
 
 total_minutes_late = 0
-window_days = [anchor_date - timedelta(days=i) for i in range(1, 31)]
+window_days = [anchor_date - timedelta(days=i) for i in range(0, 30)]
 lateness_incidents = []
 
 agent_shift_row = df_shifts[df_shifts["Agent Name"].str.lower() == agent.lower()] if "Agent Name" in df_shifts.columns else pd.DataFrame()
 
 for d in window_days:
     shift_col = d.strftime("%d/%m/%Y")
-    if not agent_shift_row.empty and shift_col in df_shifts.columns:
-        sched_val_d = agent_shift_row[shift_col].values[0]
-        sched_shift_d = str(sched_val_d).strip() if pd.notna(sched_val_d) else None
-    else:
-        sched_shift_d = None
+    sched_shift_d = get_shift_value(agent_shift_row, shift_col)
+    day_type_d = classify_rota_day(sched_shift_d, d)
 
     df_day_late_check = df_presence[
         (df_presence["Created By: Full Name"] == agent)
         & (df_presence["Start DT"].dt.date == d)
     ]
 
-    if not df_day_late_check.empty and sched_shift_d:
+    if day_type_d == "manual_late":
+        lateness_incidents.append(
+            f"- **{d.strftime('%d %b %Y')}**: Recorded late"
+        )
+        continue
+
+    if not df_day_late_check.empty and day_type_d == "scheduled":
         sched_start_d, _ = parse_shift_range(sched_shift_d, d)
         actual_start_time_d = df_day_late_check["Start DT"].min()
         if sched_start_d and actual_start_time_d:
@@ -844,20 +933,22 @@ else:
 st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
 st.markdown("### Absence – Last 90 Days")
 
-abs_window = [anchor_date - timedelta(days=i) for i in range(1, 91)]
+abs_window = [anchor_date - timedelta(days=i) for i in range(0, 90)]
 absent_days = []
+sick_days = []
 
 agent_shift_row = df_shifts[df_shifts["Agent Name"].str.lower() == agent.lower()] if "Agent Name" in df_shifts.columns else pd.DataFrame()
 
 for d in abs_window:
     shift_col_d = d.strftime("%d/%m/%Y")
-    if not agent_shift_row.empty and shift_col_d in df_shifts.columns:
-        sched_val_d = agent_shift_row[shift_col_d].values[0]
-        sched_shift_d = str(sched_val_d).strip() if pd.notna(sched_val_d) else None
-    else:
-        sched_shift_d = None
+    sched_shift_d = get_shift_value(agent_shift_row, shift_col_d)
+    day_type_d = classify_rota_day(sched_shift_d, d)
 
-    if not sched_shift_d or sched_shift_d.lower() == "not assigned" or sched_shift_d == "":
+    if day_type_d == "sick":
+        sick_days.append(d.strftime("%d %b %Y"))
+        continue
+
+    if day_type_d != "scheduled":
         continue
 
     df_day_presence = df_presence[
@@ -868,24 +959,46 @@ for d in abs_window:
     if df_day_presence.empty:
         absent_days.append(d.strftime("%d %b %Y"))
 
-if not absent_days:
+if not absent_days and not sick_days:
     st.markdown("""
         <div class="empty-state">
-            <div class="empty-state-label">No absences in the last 90 days</div>
+            <div class="empty-state-label">No absences or sickness in the last 90 days</div>
         </div>
     """, unsafe_allow_html=True)
 else:
-    st.markdown(f"""
-        <div class="metric-container-warning">
-            <div class="metric-title">Absence Count – Last 90 Days</div>
-            <div class="metric-value">{len(absent_days)}</div>
-        </div>
-    """, unsafe_allow_html=True)
+    col_abs, col_sick = st.columns(2)
+    with col_abs:
+        box_class = "metric-container-warning" if absent_days else "metric-container"
+        st.markdown(f"""
+            <div class="{box_class}">
+                <div class="metric-title">Absence Count – Last 90 Days</div>
+                <div class="metric-value">{len(absent_days)}</div>
+            </div>
+        """, unsafe_allow_html=True)
 
-    st.markdown("#### Absence Dates")
-    items_html = "\n".join([
-        f'<li class="incident-item"><span class="incident-date">{ad}</span>'
-        f'<span class="incident-badge">Absent</span></li>'
-        for ad in absent_days
-    ])
-    st.markdown(f'<ul class="incident-list">{items_html}</ul>', unsafe_allow_html=True)
+    with col_sick:
+        box_class = "metric-container-warning" if sick_days else "metric-container"
+        st.markdown(f"""
+            <div class="{box_class}">
+                <div class="metric-title">Sickness Count – Last 90 Days</div>
+                <div class="metric-value">{len(sick_days)}</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    if absent_days:
+        st.markdown("#### Absence Dates")
+        items_html = "\n".join([
+            f'<li class="incident-item"><span class="incident-date">{ad}</span>'
+            f'<span class="incident-badge">Absent</span></li>'
+            for ad in absent_days
+        ])
+        st.markdown(f'<ul class="incident-list">{items_html}</ul>', unsafe_allow_html=True)
+
+    if sick_days:
+        st.markdown("#### Sickness Dates")
+        items_html = "\n".join([
+            f'<li class="incident-item"><span class="incident-date">{sd}</span>'
+            f'<span class="incident-badge">Sick</span></li>'
+            for sd in sick_days
+        ])
+        st.markdown(f'<ul class="incident-list">{items_html}</ul>', unsafe_allow_html=True)
