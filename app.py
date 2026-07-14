@@ -718,6 +718,11 @@ else:
         day_shift_duration = (last_segment_end - first_segment_start).total_seconds()
         total_shift_seconds += day_shift_duration
 
+        # Use the scheduled rota start time as the reference point for lunch compliance.
+        shift_col = d.strftime("%d/%m/%Y")
+        scheduled_shift = get_shift_value(agent_shift_row, shift_col)
+        scheduled_shift_start, _ = parse_shift_range(scheduled_shift, d)
+
         avail_df_day = agent_daily[agent_daily["Service Presence Status: Developer Name"].isin(available_statuses)]
         if not avail_df_day.empty:
             day_available_seconds = (avail_df_day["End DT"] - avail_df_day["Start DT"]).dt.total_seconds().sum()
@@ -726,10 +731,10 @@ else:
         lunch_entry = agent_daily[
             agent_daily["Service Presence Status: Developer Name"] == "Busy_Lunch"
         ].sort_values(by="Start DT")
-        if not lunch_entry.empty:
+        if not lunch_entry.empty and scheduled_shift_start is not None:
             lunch_days_with_data += 1
             lunch_start = lunch_entry.iloc[0]["Start DT"]
-            time_to_lunch = (lunch_start - first_segment_start).total_seconds()
+            time_to_lunch = (lunch_start - scheduled_shift_start).total_seconds()
             # Allow a 15-minute grace period either side of the 3–5 hour lunch window.
             if time_to_lunch < (2 * 3600 + 45 * 60) or time_to_lunch > (5 * 3600 + 15 * 60):
                 lunch_days_out_of_window += 1
