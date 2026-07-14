@@ -819,6 +819,7 @@ else:
                     "Date": d.strftime("%d %b %Y"),
                     "Scheduled Shift": sched_shift or "Not Assigned",
                     "Actual Shift": "—",
+                    "Lunch Break": "—",
                     "Late (min)": "",
                     "Status": status,
                 }
@@ -828,6 +829,25 @@ else:
         earliest = agent_daily["Start DT"].min()
         latest = agent_daily["End DT"].max()
         actual_shift_str = f"{earliest.strftime('%H:%M')}–{latest.strftime('%H:%M')}"
+
+        # Show the full recorded lunch break window and total duration.
+        lunch_segments = agent_daily[
+            agent_daily["Service Presence Status: Developer Name"] == "Busy_Lunch"
+        ].sort_values("Start DT")
+
+        if not lunch_segments.empty:
+            lunch_start = lunch_segments["Start DT"].min()
+            lunch_end = lunch_segments["End DT"].max()
+            lunch_seconds = (
+                lunch_segments["End DT"] - lunch_segments["Start DT"]
+            ).dt.total_seconds().clip(lower=0).sum()
+            lunch_minutes = int(round(lunch_seconds / 60))
+            lunch_break_str = (
+                f"{lunch_start.strftime('%H:%M')}–{lunch_end.strftime('%H:%M')} "
+                f"({lunch_minutes} min)"
+            )
+        else:
+            lunch_break_str = "—"
 
         late_minutes = ""
         status = "Worked"
@@ -851,6 +871,7 @@ else:
                 "Date": d.strftime("%d %b %Y"),
                 "Scheduled Shift": sched_shift or "Not Assigned",
                 "Actual Shift": actual_shift_str,
+                "Lunch Break": lunch_break_str,
                 "Late (min)": late_minutes,
                 "Status": status,
             }
