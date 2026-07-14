@@ -730,7 +730,8 @@ else:
             lunch_days_with_data += 1
             lunch_start = lunch_entry.iloc[0]["Start DT"]
             time_to_lunch = (lunch_start - first_segment_start).total_seconds()
-            if time_to_lunch < 3 * 3600 or time_to_lunch > 5 * 3600:
+            # Allow a 15-minute grace period either side of the 3–5 hour lunch window.
+            if time_to_lunch < (2 * 3600 + 45 * 60) or time_to_lunch > (5 * 3600 + 15 * 60):
                 lunch_days_out_of_window += 1
 
     if total_shift_seconds > 0:
