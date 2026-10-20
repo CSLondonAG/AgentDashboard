@@ -2,6 +2,16 @@ import streamlit as st
 import pandas as pd
 from pandas.errors import EmptyDataError
 from datetime import datetime, timedelta, time as dtime, date as date_type
+from typing import List, Optional, Tuple
+
+
+STATUS_CHAT_ONLY = "Available_Chat"
+STATUS_EMAIL_ONLY = "Available_Email_and_Web"
+STATUS_SHARED = "Available_All"
+AVAILABLE_STATUSES = {STATUS_CHAT_ONLY, STATUS_EMAIL_ONLY, STATUS_SHARED}
+CHAT_DEVNAME = "sfdc_liveagent"
+EMAIL_DEVNAME = "casesChannel"
+CHAT_CONCURRENCY_CAPACITY = 2
 
 # IMPORTANT: st.set_page_config must be called as the very first Streamlit command
 st.set_page_config(page_title="Agent Dashboard", layout="wide")
@@ -424,6 +434,139 @@ def format_seconds_to_mm_ss(total_seconds):
     return f"{minutes:02d}:{seconds:02d}"
 
 
+Interval = Tuple[pd.Timestamp, pd.Timestamp]
+
+
+def merge_intervals(intervals) -> List[Interval]:
+    """Merge overlapping or adjacent intervals and discard invalid rows."""
+    norm = []
+    for pair in intervals or []:
+        if not isinstance(pair, (list, tuple)) or len(pair) < 2:
+            continue
+        start = pd.to_datetime(pair[0], errors="coerce")
+        end = pd.to_datetime(pair[1], errors="coerce")
+        if pd.notna(start) and pd.notna(end) and end > start:
+            norm.append([start, end])
+    if not norm:
+        return []
+    norm.sort(key=lambda interval: interval[0])
+    merged = [norm[0]]
+    for start, end in norm[1:]:
+        if start <= merged[-1][1]:
+            merged[-1][1] = max(merged[-1][1], end)
+        else:
+            merged.append([start, end])
+    return [tuple(interval) for interval in merged]
+
+
+def clip_to_window(start, end, window_start, window_end) -> Optional[Interval]:
+    if pd.isna(start) or pd.isna(end):
+        return None
+    clipped_start = max(pd.Timestamp(start), pd.Timestamp(window_start))
+    clipped_end = min(pd.Timestamp(end), pd.Timestamp(window_end))
+    return (clipped_start, clipped_end) if clipped_end > clipped_start else None
+
+
+def sum_seconds(intervals) -> float:
+    return float(sum((end - start).total_seconds() for start, end in intervals))
+
+
+def intersect_seconds(left_intervals, right_intervals) -> float:
+    """Return wall-clock seconds where two interval sets overlap."""
+    left = merge_intervals(left_intervals)
+    right = merge_intervals(right_intervals)
+    left_index = right_index = 0
+    total = 0.0
+    while left_index < len(left) and right_index < len(right):
+        start = max(left[left_index][0], right[right_index][0])
+        end = min(left[left_index][1], right[right_index][1])
+        if end > start:
+            total += (end - start).total_seconds()
+        if left[left_index][1] < right[right_index][1]:
+            left_index += 1
+        else:
+            right_index += 1
+    return float(total)
+
+
+def concurrent_slot_seconds(work_intervals, available_intervals,
+                            capacity: int = CHAT_CONCURRENCY_CAPACITY) -> float:
+    """Return used chat slot-seconds, capped at the configured capacity."""
+    if capacity <= 0:
+        raise ValueError("capacity must be greater than zero")
+    available = merge_intervals(available_intervals)
+    events = []
+    for pair in work_intervals or []:
+        if not isinstance(pair, (list, tuple)) or len(pair) < 2:
+            continue
+        start = pd.to_datetime(pair[0], errors="coerce")
+        end = pd.to_datetime(pair[1], errors="coerce")
+        if pd.isna(start) or pd.isna(end) or end <= start:
+            continue
+        for available_start, available_end in available:
+            overlap_start = max(start, available_start)
+            overlap_end = min(end, available_end)
+            if overlap_end > overlap_start:
+                events.append((overlap_start, 1))
+                events.append((overlap_end, -1))
+    events.sort(key=lambda event: (event[0], event[1]))
+    active = 0
+    previous = None
+    total = 0.0
+    for timestamp, change in events:
+        if previous is not None and timestamp > previous:
+            total += (timestamp - previous).total_seconds() * min(active, capacity)
+        active += change
+        previous = timestamp
+    return float(total)
+
+
+def email_assignable_capacity(chat_intervals, email_intervals, shared_intervals):
+    """Return shared email capacity, used capacity, and excess-demand seconds.
+
+    During ``Available_All`` an agent is email-assignable only while no chat is
+    active. Any active chat makes shared time unavailable for email.
+    """
+    shared = merge_intervals(shared_intervals)
+    capacity_seconds = used_seconds = raw_email_seconds = 0.0
+
+    for shared_start, shared_end in shared:
+        events = {shared_start: [0, 0], shared_end: [0, 0]}
+        for intervals, event_index in ((chat_intervals, 0), (email_intervals, 1)):
+            for pair in intervals or []:
+                if not isinstance(pair, (list, tuple)) or len(pair) < 2:
+                    continue
+                start = pd.to_datetime(pair[0], errors="coerce")
+                end = pd.to_datetime(pair[1], errors="coerce")
+                if pd.isna(start) or pd.isna(end) or end <= start:
+                    continue
+                overlap_start = max(start, shared_start)
+                overlap_end = min(end, shared_end)
+                if overlap_end <= overlap_start:
+                    continue
+                events.setdefault(overlap_start, [0, 0])[event_index] += 1
+                events.setdefault(overlap_end, [0, 0])[event_index] -= 1
+
+        active_chat = active_email = 0
+        previous = shared_start
+        for timestamp in sorted(events):
+            if timestamp > previous:
+                elapsed = (timestamp - previous).total_seconds()
+                email_assignable = active_chat == 0
+                if email_assignable:
+                    capacity_seconds += elapsed
+                    if active_email > 0:
+                        used_seconds += elapsed
+                elif active_email > 0:
+                    raw_email_seconds += elapsed
+            chat_delta, email_delta = events[timestamp]
+            active_chat += chat_delta
+            active_email += email_delta
+            previous = timestamp
+
+    return float(capacity_seconds), float(used_seconds), float(raw_email_seconds)
+
+
 # -----------------------------
 # Sidebar controls
 # -----------------------------
@@ -497,11 +640,12 @@ st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
 # -----------------------------
 range_start_dt = datetime.combine(start_date, dtime(0, 0))
 range_end_dt = datetime.combine(end_date, dtime(23, 59))
+range_end_exclusive = datetime.combine(end_date + timedelta(days=1), dtime(0, 0))
 
 df_presence_agent_range = df_presence[
     (df_presence["Created By: Full Name"] == agent)
-    & (df_presence["End DT"] >= range_start_dt)
-    & (df_presence["Start DT"] <= range_end_dt)
+    & (df_presence["End DT"] > range_start_dt)
+    & (df_presence["Start DT"] < range_end_exclusive)
 ].copy()
 
 # Items: filter by agent first, then by Start DT's DATE between start_date and end_date.
@@ -515,6 +659,12 @@ df_items_agent["Start Date"] = df_items_agent["Start DT"].dt.date
 df_items_agent_range = df_items_agent[
     (df_items_agent["Start Date"] >= start_date)
     & (df_items_agent["Start Date"] <= end_date)
+].copy()
+
+# Utilisation is based on interval overlap, not just the item's start date.
+df_items_agent_overlap = df_items_agent[
+    (df_items_agent["Start DT"] < range_end_exclusive)
+    & (df_items_agent["End DT"] > range_start_dt)
 ].copy()
 
 # List of days in the selected range
@@ -582,34 +732,75 @@ else:
     num_email_items = len(email_items)
 
     # =========================================================
-    # Shift Utilisation – Selected Range
+    # Capacity utilisation – Selected Range
     # =========================================================
-    minutes = pd.date_range(start=range_start_dt, end=range_end_dt, freq="min", inclusive="left")
+    chat_only_intervals = []
+    email_only_intervals = []
+    shared_intervals = []
+    for _, presence_row in df_presence_agent_range.iterrows():
+        interval = clip_to_window(
+            presence_row["Start DT"], presence_row["End DT"],
+            range_start_dt, range_end_exclusive,
+        )
+        if not interval:
+            continue
+        status = presence_row["Service Presence Status: Developer Name"]
+        if status == STATUS_CHAT_ONLY:
+            chat_only_intervals.append(interval)
+        elif status == STATUS_EMAIL_ONLY:
+            email_only_intervals.append(interval)
+        elif status == STATUS_SHARED:
+            shared_intervals.append(interval)
 
-    total_available_minutes = 0
-    total_handling_minutes = 0
+    chat_only_intervals = merge_intervals(chat_only_intervals)
+    email_only_intervals = merge_intervals(email_only_intervals)
+    shared_intervals = merge_intervals(shared_intervals)
 
-    with st.spinner("Calculating utilisation…"):
-        for t in minutes:
-            pres_at_t = df_presence_agent_range[
-                (df_presence_agent_range["Start DT"] <= t)
-                & (df_presence_agent_range["End DT"] > t)
-            ]
-            status = pres_at_t.iloc[0]["Service Presence Status: Developer Name"] if not pres_at_t.empty else None
+    def item_intervals(channel):
+        channel_items = df_items_agent_overlap[
+            df_items_agent_overlap["Service Channel: Developer Name"] == channel
+        ]
+        intervals = [
+            clip_to_window(start, end, range_start_dt, range_end_exclusive)
+            for start, end in zip(channel_items["Start DT"], channel_items["End DT"])
+        ]
+        return [interval for interval in intervals if interval]
 
-            if status in ("Available_Chat", "Available_Email_and_Web", "Available_All"):
-                total_available_minutes += 1
+    chat_intervals = item_intervals(CHAT_DEVNAME)
+    email_intervals = merge_intervals(item_intervals(EMAIL_DEVNAME))
 
-                is_handling = not df_items_agent_range[
-                    (df_items_agent_range["Service Channel: Developer Name"].isin(["sfdc_liveagent", "casesChannel"]))
-                    & (df_items_agent_range["Start DT"] <= t)
-                    & (df_items_agent_range["End DT"] > t)
-                ].empty
+    chat_available_intervals = merge_intervals(chat_only_intervals + shared_intervals)
+    chat_available_seconds = sum_seconds(chat_available_intervals)
+    chat_slot_seconds = concurrent_slot_seconds(
+        chat_intervals, chat_available_intervals, CHAT_CONCURRENCY_CAPACITY
+    )
+    chat_load_seconds = chat_slot_seconds / CHAT_CONCURRENCY_CAPACITY
+    chat_utilization = (
+        chat_load_seconds / chat_available_seconds if chat_available_seconds else None
+    )
 
-                if is_handling:
-                    total_handling_minutes += 1
+    email_only_capacity_seconds = sum_seconds(email_only_intervals)
+    email_only_load_seconds = (
+        intersect_seconds(email_intervals, email_only_intervals)
+        if email_only_intervals else 0.0
+    )
+    shared_email_capacity, shared_email_load, email_excess_seconds = (
+        email_assignable_capacity(chat_intervals, email_intervals, shared_intervals)
+    )
+    email_capacity_seconds = email_only_capacity_seconds + shared_email_capacity
+    email_load_seconds = email_only_load_seconds + shared_email_load
+    email_utilization = (
+        email_load_seconds / email_capacity_seconds if email_capacity_seconds else None
+    )
 
-    shift_utilization = total_handling_minutes / total_available_minutes if total_available_minutes > 0 else 0.0
+    overall_available_seconds = sum_seconds(merge_intervals(
+        chat_only_intervals + email_only_intervals + shared_intervals
+    ))
+    overall_load_seconds = chat_load_seconds + email_load_seconds
+    shift_utilization = (
+        overall_load_seconds / overall_available_seconds
+        if overall_available_seconds else None
+    )
 
     col_aht1, col_aht2 = st.columns(2)
     with col_aht1:
@@ -632,12 +823,41 @@ else:
             </div>
         """, unsafe_allow_html=True)
 
-    st.markdown(f"""
-        <div class="metric-container">
-            <div class="metric-title">Shift Utilisation</div>
-            <div class="metric-value-accent">{shift_utilization:.1%}</div>
-        </div>
-    """, unsafe_allow_html=True)
+    chat_util_display = f"{chat_utilization:.1%}" if chat_utilization is not None else "–"
+    email_util_display = f"{email_utilization:.1%}" if email_utilization is not None else "–"
+    shift_util_display = f"{shift_utilization:.1%}" if shift_utilization is not None else "–"
+    util_chat_col, util_email_col, util_shift_col = st.columns(3)
+    with util_chat_col:
+        st.markdown(f"""
+            <div class="metric-container" title="Two chat slots per agent: one active chat uses 50% capacity and two use 100%.">
+                <div class="metric-title">Chat Utilisation</div>
+                <div class="metric-value-accent">{chat_util_display}</div>
+                <div class="metric-title" style="margin-top:8px;">{chat_load_seconds/3600:.1f} load-h of {chat_available_seconds/3600:.1f}h</div>
+            </div>
+        """, unsafe_allow_html=True)
+    with util_email_col:
+        st.markdown(f"""
+            <div class="metric-container" title="During Available_All, email capacity counts only while no chat is active.">
+                <div class="metric-title">Email Utilisation</div>
+                <div class="metric-value-accent">{email_util_display}</div>
+                <div class="metric-title" style="margin-top:8px;">{email_load_seconds/3600:.1f} load-h of {email_capacity_seconds/3600:.1f} assignable-h</div>
+            </div>
+        """, unsafe_allow_html=True)
+    with util_shift_col:
+        st.markdown(f"""
+            <div class="metric-container" title="Capacity-adjusted chat and email load divided by total available time.">
+                <div class="metric-title">Shift Utilisation</div>
+                <div class="metric-value-accent">{shift_util_display}</div>
+                <div class="metric-title" style="margin-top:8px;">{overall_load_seconds/3600:.1f} load-h of {overall_available_seconds/3600:.1f}h</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    if email_excess_seconds > 0:
+        st.caption(
+            f"⚠️ {email_excess_seconds/3600:.1f} email-hours were recorded during an "
+            "active chat while the agent was in Available_All. They are excluded from "
+            "email utilisation and shown as excess demand."
+        )
 
     # =========================================================
     # Long Chat Handles (>= 15 minutes)
