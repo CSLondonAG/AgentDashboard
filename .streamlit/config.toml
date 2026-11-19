@@ -1,1 +1,10 @@
+[server]
+enableStaticServing = true
 
+[theme]
+base = "dark"
+primaryColor = "#F73998"              # GOAT Pink
+backgroundColor = "#000000"            # Black
+secondaryBackgroundColor = "#2A1A22"   # Lifted ink
+textColor = "#FFFFFF"
+font = "Roboto, sans-serif"
