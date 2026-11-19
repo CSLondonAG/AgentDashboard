@@ -73,7 +73,13 @@ st.markdown("""
     }
 
     /* ── PAGE / BACKDROP ─────────────────────────────────── */
-    html, body, .stApp, .stApp * { font-family: var(--font-stack); }
+    html, body, .stApp, .stApp *:not([data-testid="stIconMaterial"]):not(.material-icons):not([class*="material-symbols"]) {
+        font-family: var(--font-stack);
+    }
+    /* Keep Streamlit's icon font so icons don't render as raw text (e.g. "keyboard_double_arrow_left") */
+    [data-testid="stIconMaterial"], .material-icons, [class*="material-symbols"] {
+        font-family: "Material Symbols Rounded", "Material Icons" !important;
+    }
     .stApp {
         color: var(--goat-white);
         background:
