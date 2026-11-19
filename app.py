@@ -32,59 +32,148 @@ try:
 except Exception:
     svg_code = ""
 
-# Design system tokens + component styles
+# GOAT brand theme: Goat Pink on black, liquid-glass panels, Roboto
 st.markdown("""
     <style>
-    /* ── TOKENS ─────────────────────────────────────────── */
+    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;600;700&display=swap');
+
+    /* ── GOAT BRAND TOKENS ───────────────────────────────── */
     :root {
-        --color-bg:            #f8f9fa;
-        --color-surface:       #ffffff;
-        --color-border:        #e5e7eb;
-        --color-text-primary:  #111827;
-        --color-text-label:    #6b7280;
-        --color-accent:        #2563eb;
-        --color-success:       #16a34a;
-        --color-warning:       #dc2626;
-        --color-warning-bg:    #fef2f2;
-        --color-warning-border:#fca5a5;
-        --shadow-card:         0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
-        --radius-card:         12px;
-        --card-padding:        20px 24px;
-        --card-gap:            24px;
+        --goat-pink:        #F73998;
+        --goat-white:       #FFFFFF;
+        --goat-black:       #000000;
+        --goat-pink-glow:   #FF6FB5;
+        --goat-pink-deep:   #8F1049;
+        --goat-ink:         #0D0509;
+        --goat-grey:        #2A1A22;
+
+        --glass-bg:         linear-gradient(145deg, rgba(255,255,255,0.14) 0%, rgba(255,255,255,0.03) 100%);
+        --glass-tint:       rgba(13, 5, 9, 0.50);
+        --glass-border:     rgba(255,255,255,0.20);
+        --glass-highlight:  rgba(255,255,255,0.40);
+        --glass-shadow:     0 26px 50px -20px rgba(0, 0, 0, 0.85);
+        --glass-blur:       blur(22px) saturate(150%);
+
+        --color-text-primary: #FFFFFF;
+        --color-text-label:   rgba(255,255,255,0.68);
+        --color-accent:       var(--goat-pink-glow);
+        /* Status colours stay semantic and independent of the brand palette */
+        --color-success:        #2EE59D;
+        --color-warning:        #FF4D4D;
+        --color-warning-bg:     rgba(255,77,77,0.12);
+        --color-warning-border: rgba(255,77,77,0.45);
+
+        --radius-tile:   28px;
+        --radius-metric: 20px;
+        --radius-input:  14px;
+        --radius-pill:   999px;
+        --card-padding:  20px 24px;
+        --card-gap:      24px;
+        --font-stack:    'Roboto', 'Segoe UI', system-ui, sans-serif;
     }
 
-    /* ── PAGE ────────────────────────────────────────────── */
+    /* ── PAGE / BACKDROP ─────────────────────────────────── */
+    html, body, .stApp, .stApp * { font-family: var(--font-stack); }
     .stApp {
-        background-color: var(--color-bg);
+        color: var(--goat-white);
+        background:
+            radial-gradient(circle at 8% 4%,  rgba(247,57,152,0.35) 0%, transparent 38%),
+            radial-gradient(circle at 92% 38%, rgba(143,16,73,0.55) 0%, transparent 42%),
+            radial-gradient(circle at 20% 70%, rgba(143,16,73,0.30) 0%, transparent 40%),
+            radial-gradient(circle at 80% 96%, rgba(255,111,181,0.16) 0%, transparent 38%),
+            radial-gradient(circle at 50% 50%, rgba(247,57,152,0.06) 0%, transparent 60%),
+            radial-gradient(circle at 0% 100%, rgba(255,111,181,0.10) 0%, transparent 35%),
+            linear-gradient(160deg, #000000 0%, var(--goat-ink) 100%);
+        background-attachment: fixed;
+    }
+    [data-testid="stHeader"] { background: transparent; }
+    /* Thin pink rule along the bottom edge of the page */
+    .stApp::after {
+        content: "";
+        position: fixed;
+        left: 0; right: 0; bottom: 0;
+        height: 3px;
+        background: var(--goat-pink);
+        z-index: 999;
+        pointer-events: none;
     }
 
-    /* ── HEADER ──────────────────────────────────────────── */
-    .custom-main-header-container {
-        display: flex;
-        align-items: center;
-        justify-content: flex-start;
-        margin-top: 0;
-        padding-top: 1rem;
-        margin-bottom: 0.25rem;
-        padding-bottom: 0;
+    /* ── SIDEBAR ─────────────────────────────────────────── */
+    [data-testid="stSidebar"] {
+        background: rgba(13,5,9,0.62);
+        backdrop-filter: blur(30px) saturate(140%);
+        -webkit-backdrop-filter: blur(30px) saturate(140%);
+        border-right: 1px solid var(--glass-border);
+    }
+    [data-testid="stSidebar"] label, [data-testid="stSidebar"] p {
+        color: var(--color-text-label) !important;
     }
 
-    .custom-main-header-container h1 {
-        font-size: 1.75rem !important;
-        font-weight: 700 !important;
-        color: var(--color-text-primary) !important;
+    /* ── INPUTS / SELECTS ────────────────────────────────── */
+    [data-baseweb="select"] > div,
+    [data-baseweb="input"],
+    [data-baseweb="base-input"] {
+        background-color: rgba(255,255,255,0.08) !important;
+        border-radius: var(--radius-input) !important;
+        border-color: var(--glass-border) !important;
+        color: var(--goat-white) !important;
+    }
+    [data-baseweb="select"] > div:focus-within,
+    [data-baseweb="input"]:focus-within {
+        border-color: var(--goat-pink) !important;
+        box-shadow: 0 0 0 1px var(--goat-pink) !important;
+    }
+    [data-baseweb="popover"] > div, [data-baseweb="menu"] {
+        background-color: var(--goat-grey) !important;
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-input);
+    }
+
+    /* ── HERO ────────────────────────────────────────────── */
+    .goat-hero {
+        position: relative;
+        padding: 28px 32px 22px 32px;
+        margin-bottom: var(--card-gap);
+        border-radius: var(--radius-tile);
+        background: var(--glass-bg), var(--glass-tint);
+        border: 1px solid var(--glass-border);
+        box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-highlight);
+        backdrop-filter: var(--glass-blur);
+        -webkit-backdrop-filter: var(--glass-blur);
+    }
+    .goat-hero-kicker {
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: var(--goat-pink);
+        margin-bottom: 6px;
+    }
+    .goat-hero h1 {
+        font-size: 2.1rem !important;
+        font-weight: 500 !important;
+        line-height: 1.15 !important;
         margin: 0 !important;
         padding: 0 !important;
-        line-height: 1.2 !important;
-        display: inline;
+        color: var(--goat-white) !important;
     }
-
-    .header-logo-inline {
-        width: 40px;
-        height: auto;
-        margin-left: 12px;
-        vertical-align: middle;
+    .goat-hero h1 .line-pink  { display: block; color: var(--goat-pink); }
+    .goat-hero h1 .line-white { display: block; color: var(--goat-white); }
+    .goat-hero-rule {
+        border: none;
+        border-top: 1px solid rgba(255,255,255,0.18);
+        margin: 16px 0 12px 0;
     }
+    .goat-hero-meta {
+        font-size: 0.875rem;
+        font-weight: 700;
+        color: var(--goat-pink-glow);
+        letter-spacing: 0.01em;
+    }
+    .goat-hero-logo {
+        position: absolute;
+        top: 22px; right: 28px;
+        width: 64px;
+    }
+    .goat-hero-logo svg { width: 100%; height: auto; }
 
     /* ── TYPOGRAPHY ──────────────────────────────────────── */
     .main h2 {
@@ -94,17 +183,15 @@ st.markdown("""
         padding-bottom: 0 !important;
         line-height: 1.2 !important;
     }
-
     .main h3 {
         font-size: 0.8rem !important;
         font-weight: 600 !important;
         text-transform: uppercase !important;
         letter-spacing: 0.06em !important;
-        color: var(--color-text-label) !important;
+        color: var(--goat-pink) !important;
         margin-top: 0 !important;
         margin-bottom: 1rem !important;
     }
-
     .main h4 {
         font-size: 0.8rem !important;
         font-weight: 600 !important;
@@ -114,33 +201,27 @@ st.markdown("""
         margin-top: 1.5rem !important;
         margin-bottom: 0.75rem !important;
     }
-
-    .subheader-smaller {
-        font-size: 0.8125rem;
-        font-weight: 500;
-        color: var(--color-text-label);
-        margin-bottom: 1rem;
-        letter-spacing: 0.01em;
-    }
+    [data-testid="stCaptionContainer"] { color: var(--color-text-label) !important; }
 
     /* ── DIVIDER ─────────────────────────────────────────── */
     .section-divider {
         border: none;
-        border-top: 1px solid var(--color-border);
+        border-top: 1px solid rgba(255,255,255,0.14);
         margin: 2rem 0;
     }
 
-    /* ── METRIC CARDS ────────────────────────────────────── */
+    /* ── METRIC CARDS (glass) ────────────────────────────── */
     .metric-container {
         padding: var(--card-padding);
-        border-radius: var(--radius-card);
-        background-color: var(--color-surface);
-        box-shadow: var(--shadow-card);
-        border: 1px solid var(--color-border);
+        border-radius: var(--radius-metric);
+        background: var(--glass-bg), var(--glass-tint);
+        border: 1px solid var(--glass-border);
+        box-shadow: var(--glass-shadow), inset 0 1px 0 var(--glass-highlight);
+        backdrop-filter: var(--glass-blur);
+        -webkit-backdrop-filter: var(--glass-blur);
         margin-bottom: var(--card-gap);
         text-align: center;
     }
-
     .metric-title {
         font-size: 0.75rem;
         font-weight: 500;
@@ -149,39 +230,27 @@ st.markdown("""
         color: var(--color-text-label);
         margin-bottom: 8px;
     }
-
-    .metric-value {
+    .metric-value, .metric-value-accent, .metric-value-success {
         font-size: 2rem;
         font-weight: 700;
-        color: var(--color-text-primary);
         line-height: 1.1;
     }
-
-    .metric-value-accent {
-        font-size: 2rem;
-        font-weight: 700;
-        color: var(--color-accent);
-        line-height: 1.1;
-    }
-
-    .metric-value-success {
-        font-size: 2rem;
-        font-weight: 700;
-        color: var(--color-success);
-        line-height: 1.1;
-    }
+    .metric-value         { color: var(--color-text-primary); }
+    .metric-value-accent  { color: var(--goat-pink-glow); }
+    .metric-value-success { color: var(--color-success); }
 
     /* ── WARNING CARDS ───────────────────────────────────── */
     .metric-container-warning {
         padding: var(--card-padding);
-        border-radius: var(--radius-card);
-        background-color: var(--color-warning-bg);
-        box-shadow: var(--shadow-card);
+        border-radius: var(--radius-metric);
+        background: linear-gradient(145deg, rgba(255,77,77,0.18) 0%, rgba(255,77,77,0.05) 100%), var(--glass-tint);
         border: 1px solid var(--color-warning-border);
+        box-shadow: var(--glass-shadow), inset 0 1px 0 rgba(255,255,255,0.18);
+        backdrop-filter: var(--glass-blur);
+        -webkit-backdrop-filter: var(--glass-blur);
         margin-bottom: var(--card-gap);
         text-align: center;
     }
-
     .metric-container-warning .metric-title {
         font-size: 0.75rem;
         font-weight: 500;
@@ -190,7 +259,6 @@ st.markdown("""
         color: var(--color-text-label);
         margin-bottom: 8px;
     }
-
     .metric-container-warning .metric-value {
         font-size: 2rem;
         font-weight: 700;
@@ -198,38 +266,26 @@ st.markdown("""
         line-height: 1.1;
     }
 
-    /* ── LATENESS INCIDENT LIST ──────────────────────────── */
-    .incident-list {
-        list-style: none;
-        padding: 0;
-        margin: 0;
-    }
-
+    /* ── LATENESS / ABSENCE INCIDENT LIST ────────────────── */
+    .incident-list { list-style: none; padding: 0; margin: 0; }
     .incident-item {
         display: flex;
         align-items: center;
         justify-content: space-between;
         padding: 10px 16px;
-        border-radius: 8px;
-        background-color: var(--color-surface);
-        border: 1px solid var(--color-border);
+        border-radius: var(--radius-input);
+        background: rgba(255,255,255,0.06);
+        border: 1px solid var(--glass-border);
         margin-bottom: 8px;
     }
-
-    .incident-date {
-        font-size: 0.875rem;
-        font-weight: 500;
-        color: var(--color-text-primary);
-    }
-
+    .incident-date { font-size: 0.875rem; font-weight: 500; color: var(--goat-white); }
     .incident-badge {
         font-size: 0.75rem;
         font-weight: 600;
-        color: var(--color-warning);
-        background-color: var(--color-warning-bg);
-        border: 1px solid var(--color-warning-border);
-        padding: 3px 10px;
-        border-radius: 999px;
+        color: var(--goat-white);
+        background-color: var(--goat-pink);
+        padding: 3px 12px;
+        border-radius: var(--radius-pill);
         letter-spacing: 0.02em;
     }
 
@@ -242,7 +298,6 @@ st.markdown("""
         padding: 3rem 2rem;
         text-align: center;
     }
-
     .empty-state-label {
         margin-top: 1rem;
         font-size: 0.875rem;
@@ -251,19 +306,37 @@ st.markdown("""
         letter-spacing: 0.02em;
     }
 
-    /* ── SHIFT BOX (retained, cleaned up) ───────────────── */
-    .shift-box {
-        padding: var(--card-padding);
-        border-radius: var(--radius-card);
-        background-color: var(--color-surface);
-        border: 1px solid var(--color-border);
-        font-size: 1.5em;
-        font-weight: 700;
-        color: var(--color-accent);
-        text-align: center;
-        box-shadow: var(--shadow-card);
+    /* ── EXPANDER, ALERTS, TABLES ────────────────────────── */
+    [data-testid="stExpander"] {
+        background: var(--glass-bg), var(--glass-tint);
+        border: 1px solid var(--glass-border) !important;
+        border-radius: var(--radius-metric);
+        backdrop-filter: var(--glass-blur);
+        -webkit-backdrop-filter: var(--glass-blur);
+    }
+    [data-testid="stAlert"] {
+        background: rgba(255,255,255,0.06);
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-input);
+        color: var(--goat-white);
+    }
+    [data-testid="stDataFrame"] {
+        border: 1px solid var(--glass-border);
+        border-radius: var(--radius-metric);
+        overflow: hidden;
     }
 
+    /* ── SHIFT BOX ───────────────────────────────────────── */
+    .shift-box {
+        padding: var(--card-padding);
+        border-radius: var(--radius-tile);
+        background: var(--goat-pink);
+        font-size: 1.5em;
+        font-weight: 700;
+        color: var(--goat-white);
+        text-align: center;
+        box-shadow: var(--glass-shadow);
+    }
     </style>
 """, unsafe_allow_html=True)
 
@@ -606,23 +679,20 @@ if start_date > end_date:
 # -----------------------------
 # Header (Agent + Date range)
 # -----------------------------
-st.markdown(f"""
-    <div class="custom-main-header-container">
-        <h1>Agent Dashboard for {agent}</h1>
-        <div class="header-logo-inline">{svg_code}</div>
-    </div>
-""", unsafe_allow_html=True)
-
 if start_date == end_date:
     date_label = start_date.strftime("%d %B %Y")
 else:
     date_label = f"{start_date.strftime('%d %B %Y')} – {end_date.strftime('%d %B %Y')}"
 
-st.markdown(
-    f"""<div class='subheader-smaller'>Date range: {date_label}</div>""",
-    unsafe_allow_html=True,
-)
-st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
+st.markdown(f"""
+    <div class="goat-hero">
+        <div class="goat-hero-logo">{svg_code}</div>
+        <div class="goat-hero-kicker">GOAT Customer Service</div>
+        <h1><span class="line-pink">Agent Dashboard</span><span class="line-white">{agent}</span></h1>
+        <hr class="goat-hero-rule">
+        <div class="goat-hero-meta">Date range | {date_label}</div>
+    </div>
+""", unsafe_allow_html=True)
 
 # -----------------------------
 # Filter data to agent + range
