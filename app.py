@@ -863,8 +863,8 @@ else:
     util_chat_col, util_email_col, util_shift_col = st.columns(3)
     with util_chat_col:
         st.markdown(f"""
-            <div class="metric-container" title="Two chat slots per agent: one active chat uses 50% capacity and two use 100%.">
-                <div class="metric-title">Chat Utilisation</div>
+            <div class="metric-container" title="Two messaging slots per agent: one active messaging session uses 50% capacity and two use 100%.">
+                <div class="metric-title">Messaging Utilisation</div>
                 <div class="metric-value-accent">{chat_util_display}</div>
                 <div class="metric-title" style="margin-top:8px;">{chat_load_seconds/3600:.1f} load-h of {chat_available_seconds/3600:.1f}h</div>
             </div>
