@@ -4,6 +4,11 @@ from pandas.errors import EmptyDataError
 from datetime import datetime, timedelta, time as dtime, date as date_type
 from typing import List, Optional, Tuple
 
+from messaging_kpis import (
+    build_agent_messaging_cards,
+    calculate_agent_messaging_snapshot,
+)
+
 
 STATUS_CHAT_ONLY = "Available_Chat"
 STATUS_EMAIL_ONLY = "Available_Email_and_Web"
@@ -334,10 +339,35 @@ def load_data():
                 (df_chat["Duration (s)"] > 0)
             ].copy()
 
-    return df_items, df_presence, df_shifts, df_chat
+    # Enhanced Messaging exports are optional so the existing dashboard can
+    # still open before those reports are added to a deployment.
+    try:
+        df_messaging_work = safe_read_csv("report_messaging_agent_work.csv")
+    except FileNotFoundError:
+        df_messaging_work = pd.DataFrame()
+    try:
+        df_messaging_metrics = safe_read_csv("report_messaging_metrics.csv")
+    except FileNotFoundError:
+        df_messaging_metrics = pd.DataFrame()
+
+    return (
+        df_items,
+        df_presence,
+        df_shifts,
+        df_chat,
+        df_messaging_work,
+        df_messaging_metrics,
+    )
 
 
-df_items, df_presence, df_shifts, df_chat = load_data()
+(
+    df_items,
+    df_presence,
+    df_shifts,
+    df_chat,
+    df_messaging_work,
+    df_messaging_metrics,
+) = load_data()
 
 if df_presence.empty or df_items.empty or df_shifts.empty:
     st.error("One or more data files are empty or missing. Please check report_items.csv, report_presence.csv, and shifts.csv.")
@@ -667,6 +697,14 @@ df_items_agent_overlap = df_items_agent[
     & (df_items_agent["End DT"] > range_start_dt)
 ].copy()
 
+messaging_snapshot = calculate_agent_messaging_snapshot(
+    df_messaging_work,
+    df_messaging_metrics,
+    agent,
+    start_date,
+    end_date,
+)
+
 # List of days in the selected range
 day_list = [
     start_date + timedelta(days=i)
@@ -822,6 +860,45 @@ else:
                 <div class="metric-value">{num_email_items}</div>
             </div>
         """, unsafe_allow_html=True)
+
+    st.markdown("#### Enhanced Messaging Performance")
+    messaging_cards = build_agent_messaging_cards(messaging_snapshot)
+    for card_start in range(0, len(messaging_cards), 4):
+        card_columns = st.columns(4)
+        for card_column, card in zip(
+            card_columns, messaging_cards[card_start:card_start + 4]
+        ):
+            with card_column:
+                st.markdown(f"""
+                    <div class="metric-container" title="{card.detail}">
+                        <div class="metric-title">{card.label}</div>
+                        <div class="metric-value-accent">{card.value}</div>
+                    </div>
+                """, unsafe_allow_html=True)
+
+    with st.expander("Daily Enhanced Messaging detail"):
+        if messaging_snapshot.daily.empty:
+            st.info("No Enhanced Messaging work for this agent in the selected range.")
+        else:
+            messaging_daily = messaging_snapshot.daily.copy()
+            messaging_daily["Date"] = pd.to_datetime(
+                messaging_daily["Date"]
+            ).dt.strftime("%d %b %Y")
+            duration_columns = {
+                "Messaging AHT (s)": "Messaging AHT",
+                "Total Handle (s)": "Total Handling Time",
+                "Median Speed to Answer (s)": "Median Speed to Answer",
+                "Median First Response (s)": "Median First Response",
+            }
+            for source_column, display_column in duration_columns.items():
+                messaging_daily[display_column] = messaging_daily[source_column].apply(
+                    lambda value: format_seconds_to_mm_ss(value)
+                    if pd.notna(value) else "–"
+                )
+            messaging_daily = messaging_daily.drop(
+                columns=list(duration_columns)
+            ).rename(columns={"First Response <=60s (%)": "First Response ≤60s (%)"})
+            st.dataframe(messaging_daily, width="stretch", hide_index=True)
 
     chat_util_display = f"{chat_utilization:.1%}" if chat_utilization is not None else "–"
     email_util_display = f"{email_utilization:.1%}" if email_utilization is not None else "–"
