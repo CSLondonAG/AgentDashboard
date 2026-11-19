@@ -27,6 +27,14 @@ class MessagingCard:
     detail: str
 
 
+@dataclass(frozen=True)
+class MessagingSummaryTile:
+    primary_label: str
+    primary_value: str
+    secondary_label: str
+    secondary_value: str
+
+
 def _format_mmss(seconds: Optional[float]) -> str:
     if seconds is None or pd.isna(seconds):
         return "–"
@@ -40,6 +48,18 @@ def _format_hhmmss(seconds: float) -> str:
     hours, remainder = divmod(total, 3600)
     minutes, secs = divmod(remainder, 60)
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+
+def build_agent_messaging_summary_tile(
+    snapshot: AgentMessagingSnapshot,
+) -> MessagingSummaryTile:
+    """Build the Messaging tile shown in the AHT and volume summary."""
+    return MessagingSummaryTile(
+        primary_label="Messaging AHT (mm:ss)",
+        primary_value=_format_mmss(snapshot.aht_seconds),
+        secondary_label="Sessions Handled",
+        secondary_value=f"{snapshot.sessions_handled:,}",
+    )
 
 
 def build_agent_messaging_cards(
