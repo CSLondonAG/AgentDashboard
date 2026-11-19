@@ -7,6 +7,7 @@ from typing import List, Optional, Tuple
 from messaging_kpis import (
     build_agent_messaging_cards,
     build_agent_messaging_summary_tile,
+    calculate_agent_messaging_intervals,
     calculate_agent_messaging_snapshot,
     format_messaging_review_sessions,
     load_messaging_exports,
@@ -761,12 +762,19 @@ else:
         return [interval for interval in intervals if interval]
 
     chat_intervals = item_intervals(CHAT_DEVNAME)
+    messaging_intervals = list(calculate_agent_messaging_intervals(
+        df_messaging_work,
+        agent,
+        range_start_dt,
+        range_end_exclusive,
+    ))
+    conversation_intervals = chat_intervals + messaging_intervals
     email_intervals = merge_intervals(item_intervals(EMAIL_DEVNAME))
 
     chat_available_intervals = merge_intervals(chat_only_intervals + shared_intervals)
     chat_available_seconds = sum_seconds(chat_available_intervals)
     chat_slot_seconds = concurrent_slot_seconds(
-        chat_intervals, chat_available_intervals, CHAT_CONCURRENCY_CAPACITY
+        conversation_intervals, chat_available_intervals, CHAT_CONCURRENCY_CAPACITY
     )
     chat_load_seconds = chat_slot_seconds / CHAT_CONCURRENCY_CAPACITY
     chat_utilization = (
@@ -779,7 +787,9 @@ else:
         if email_only_intervals else 0.0
     )
     shared_email_capacity, shared_email_load, email_excess_seconds = (
-        email_assignable_capacity(chat_intervals, email_intervals, shared_intervals)
+        email_assignable_capacity(
+            conversation_intervals, email_intervals, shared_intervals
+        )
     )
     email_capacity_seconds = email_only_capacity_seconds + shared_email_capacity
     email_load_seconds = email_only_load_seconds + shared_email_load
@@ -879,7 +889,7 @@ else:
         """, unsafe_allow_html=True)
     with util_shift_col:
         st.markdown(f"""
-            <div class="metric-container" title="Capacity-adjusted chat and email load divided by total available time.">
+            <div class="metric-container" title="Capacity-adjusted messaging and email load divided by total available time.">
                 <div class="metric-title">Shift Utilisation</div>
                 <div class="metric-value-accent">{shift_util_display}</div>
                 <div class="metric-title" style="margin-top:8px;">{overall_load_seconds/3600:.1f} load-h of {overall_available_seconds/3600:.1f}h</div>

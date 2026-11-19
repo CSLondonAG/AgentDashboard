@@ -75,6 +75,49 @@ def load_messaging_exports(
     return load_optional(agent_work_path), load_optional(metrics_path)
 
 
+def calculate_agent_messaging_intervals(
+    agent_work: pd.DataFrame,
+    agent: str,
+    window_start: pd.Timestamp,
+    window_end: pd.Timestamp,
+) -> tuple[tuple[pd.Timestamp, pd.Timestamp], ...]:
+    """Return the selected agent's accepted Messaging work inside a window."""
+    required = {"User: Full Name", "Accept Date", "Close Date"}
+    if agent_work is None or agent_work.empty or not required.issubset(agent_work.columns):
+        return ()
+
+    start = pd.Timestamp(window_start)
+    end = pd.Timestamp(window_end)
+    if end <= start:
+        return ()
+
+    work = agent_work.copy()
+    agent_key = str(agent).strip().casefold()
+    work["_Agent Key"] = (
+        work["User: Full Name"].astype("string").str.strip().str.casefold()
+    )
+    work["Accept Date"] = pd.to_datetime(
+        work["Accept Date"], format="mixed", dayfirst=True, errors="coerce"
+    )
+    work["Close Date"] = pd.to_datetime(
+        work["Close Date"], format="mixed", dayfirst=True, errors="coerce"
+    )
+    selected = work[
+        work["_Agent Key"].eq(agent_key)
+        & work["Accept Date"].notna()
+        & work["Close Date"].notna()
+        & (work["Close Date"] > work["Accept Date"])
+        & (work["Accept Date"] < end)
+        & (work["Close Date"] > start)
+    ]
+
+    intervals = [
+        (max(accepted, start), min(closed, end))
+        for accepted, closed in zip(selected["Accept Date"], selected["Close Date"])
+    ]
+    return tuple(sorted(intervals, key=lambda interval: interval[0]))
+
+
 def build_agent_messaging_summary_tile(
     snapshot: AgentMessagingSnapshot,
 ) -> MessagingSummaryTile:
