@@ -8,6 +8,8 @@ from messaging_kpis import (
     build_agent_messaging_cards,
     build_agent_messaging_summary_tile,
     calculate_agent_messaging_snapshot,
+    format_messaging_review_sessions,
+    load_messaging_exports,
 )
 
 
@@ -301,61 +303,17 @@ def load_data():
         if "Agent Name" in df_shifts.columns:
             df_shifts["Agent Name"] = df_shifts["Agent Name"].astype(str).str.strip()
 
-    # Chat transcripts — one row per conversation, with exact start/end times
-    df_chat = safe_read_csv("chat_transcripts.csv")
-    if df_chat.empty:
-        # Try common alternative filenames in case it was uploaded differently
-        for alt in ["chat_transcript.csv", "chat.csv", "transcripts.csv", "report1771339850121.csv"]:
-            df_chat = safe_read_csv(alt)
-            if not df_chat.empty:
-                break
-    if not df_chat.empty:
-        # Brute-force clean every column name: remove BOM, strip whitespace,
-        # then build a lookup that matches regardless of BOM or encoding quirks
-        clean = {col: col.encode("utf-8").decode("utf-8-sig").strip() for col in df_chat.columns}
-        df_chat.rename(columns=clean, inplace=True)
-
-        # Now find the agent column — it may be "Owner: Full Name" or a BOM variant
-        agent_col = next((c for c in df_chat.columns if "Full Name" in c), None)
-        if agent_col and agent_col != "Agent Name":
-            df_chat.rename(columns={agent_col: "Agent Name"}, inplace=True)
-
-        # Normalise Case Number column
-        case_col = next((c for c in df_chat.columns if "Case Number" in c), None)
-        if case_col and case_col != "Case Number":
-            df_chat.rename(columns={case_col: "Case Number"}, inplace=True)
-
-        if "Agent Name" in df_chat.columns:
-            df_chat["Agent Name"] = df_chat["Agent Name"].astype(str).str.strip()
-        if "Start Time" in df_chat.columns:
-            df_chat["Start DT"] = pd.to_datetime(df_chat["Start Time"], format="%d/%m/%Y, %H:%M", errors="coerce")
-        if "End Time" in df_chat.columns:
-            df_chat["End DT"] = pd.to_datetime(df_chat["End Time"], format="%d/%m/%Y, %H:%M", errors="coerce")
-        if "Start DT" in df_chat.columns and "End DT" in df_chat.columns:
-            df_chat["Duration (s)"] = (df_chat["End DT"] - df_chat["Start DT"]).dt.total_seconds()
-            # Drop abandoned chats (zero/null duration — visitor left before agent responded)
-            df_chat = df_chat[
-                df_chat["Start DT"].notna() &
-                df_chat["End DT"].notna() &
-                (df_chat["Duration (s)"] > 0)
-            ].copy()
-
     # Enhanced Messaging exports are optional so the existing dashboard can
     # still open before those reports are added to a deployment.
-    try:
-        df_messaging_work = safe_read_csv("report_messaging_agent_work.csv")
-    except FileNotFoundError:
-        df_messaging_work = pd.DataFrame()
-    try:
-        df_messaging_metrics = safe_read_csv("report_messaging_metrics.csv")
-    except FileNotFoundError:
-        df_messaging_metrics = pd.DataFrame()
+    df_messaging_work, df_messaging_metrics = load_messaging_exports(
+        "report_messaging_agent_work.csv",
+        "report_messaging_metrics.csv",
+    )
 
     return (
         df_items,
         df_presence,
         df_shifts,
-        df_chat,
         df_messaging_work,
         df_messaging_metrics,
     )
@@ -365,7 +323,6 @@ def load_data():
     df_items,
     df_presence,
     df_shifts,
-    df_chat,
     df_messaging_work,
     df_messaging_metrics,
 ) = load_data()
@@ -937,59 +894,20 @@ else:
         )
 
     # =========================================================
-    # Long Chat Handles (>= 15 minutes)
-    # =========================================================
-    # Driven directly from chat_transcripts.csv — one row per
-    # conversation with exact Start/End times recorded by Salesforce.
-    # No segment grouping or fuzzy matching needed.
+    # Messaging Sessions Requiring Review
     # =========================================================
     st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
-    st.markdown("### Long Chat Handles (≥ 15 min)")
+    st.markdown("### Messaging Sessions Requiring Review")
 
-    LONG_CHAT_THRESHOLD_SECONDS = 15 * 60
-
-    required_chat_cols = {"Agent Name", "Start DT", "End DT", "Duration (s)"}
-    if df_chat.empty or not required_chat_cols.issubset(df_chat.columns):
-        if df_chat.empty:
-            st.warning("⚠️ chat_transcripts.csv not found. Make sure it is committed to your repository.")
-        else:
-            found_cols = list(df_chat.columns)
-            missing = required_chat_cols - set(df_chat.columns)
-            st.warning(f"⚠️ chat_transcripts.csv loaded but missing expected columns.\n\nFound: `{found_cols}`\n\nMissing: `{missing}`")
+    if messaging_snapshot.review_sessions.empty:
+        st.info("No Messaging sessions requiring review in the selected range.")
     else:
-        # Filter to this agent, within the selected date range
-        agent_chats = df_chat[
-            (df_chat["Agent Name"] == agent) &
-            (df_chat["Start DT"].dt.date >= start_date) &
-            (df_chat["Start DT"].dt.date <= end_date)
-        ].copy()
-
-        long_chats = agent_chats[
-            agent_chats["Duration (s)"] >= LONG_CHAT_THRESHOLD_SECONDS
-        ].sort_values("Start DT").reset_index(drop=True)
-
-        if long_chats.empty:
-            st.info("No chat conversations of 15 minutes or more in the selected range.")
-        else:
-            long_chats["Handle Time (mm:ss)"] = long_chats["Duration (s)"].apply(
-                format_seconds_to_mm_ss
-            )
-
-            display_cols = [
-                "Handle Time (mm:ss)",
-                "Start DT",
-                "End DT",
-                "Case Number",
-                "Visitor Email",
-                "Chat Button: Developer Name",
-                "Chat Transcript Name",
-            ]
-            cols_present = [c for c in display_cols if c in long_chats.columns]
-            st.dataframe(
-                long_chats[cols_present],
-                width="stretch",
-                hide_index=True,
-            )
+        messaging_review_display = format_messaging_review_sessions(messaging_snapshot.review_sessions)
+        st.dataframe(
+            messaging_review_display,
+            width="stretch",
+            hide_index=True,
+        )
 
     st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
     st.markdown("### Daily Overview")
