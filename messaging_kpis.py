@@ -1,10 +1,12 @@
 """Agent-attributed Enhanced Messaging KPI calculations."""
 
+import math
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Optional
 
 import pandas as pd
+from pandas.errors import EmptyDataError, ParserError
 
 
 @dataclass(frozen=True)
@@ -18,6 +20,7 @@ class AgentMessagingSnapshot:
     median_first_response_seconds: Optional[float] = None
     measurable_responses: int = 0
     daily: pd.DataFrame = field(default_factory=pd.DataFrame)
+    review_sessions: pd.DataFrame = field(default_factory=pd.DataFrame)
 
 
 @dataclass(frozen=True)
@@ -48,6 +51,28 @@ def _format_hhmmss(seconds: float) -> str:
     hours, remainder = divmod(total, 3600)
     minutes, secs = divmod(remainder, 60)
     return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+
+def _finite_numeric(values: pd.Series) -> pd.Series:
+    numeric = pd.to_numeric(values, errors="coerce")
+    return numeric.where(
+        numeric.map(lambda value: pd.isna(value) or math.isfinite(float(value)))
+    )
+
+
+def load_messaging_exports(
+    agent_work_path: object,
+    metrics_path: object,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Load optional Messaging exports independently and tolerate bad files."""
+
+    def load_optional(path: object) -> pd.DataFrame:
+        try:
+            return pd.read_csv(path)
+        except (FileNotFoundError, EmptyDataError, ParserError, UnicodeDecodeError):
+            return pd.DataFrame()
+
+    return load_optional(agent_work_path), load_optional(metrics_path)
 
 
 def build_agent_messaging_summary_tile(
@@ -83,6 +108,44 @@ def build_agent_messaging_cards(
     )
 
 
+def format_messaging_review_sessions(review_sessions: pd.DataFrame) -> pd.DataFrame:
+    """Return review rows with user-facing dates and durations."""
+    source_columns = [
+        "Accepted At",
+        "Messaging Session",
+        "Handle Time (s)",
+        "Speed To Answer (s)",
+        "First Response (s)",
+        "Review Reason",
+    ]
+    display_columns = [
+        "Accepted At",
+        "Messaging Session",
+        "Handle Time",
+        "Speed To Answer",
+        "First Response",
+        "Review Reason",
+    ]
+    if review_sessions is None or review_sessions.empty or not set(source_columns).issubset(
+        review_sessions.columns
+    ):
+        return pd.DataFrame(columns=display_columns)
+
+    display = review_sessions[source_columns].copy()
+    accepted_at = pd.to_datetime(display["Accepted At"], errors="coerce")
+    display["Accepted At"] = accepted_at.apply(
+        lambda value: value.strftime("%d %b %Y %H:%M") if pd.notna(value) else "–"
+    )
+    duration_columns = {
+        "Handle Time (s)": "Handle Time",
+        "Speed To Answer (s)": "Speed To Answer",
+        "First Response (s)": "First Response",
+    }
+    for source, target in duration_columns.items():
+        display[target] = pd.to_numeric(display[source], errors="coerce").apply(_format_mmss)
+    return display.drop(columns=duration_columns).loc[:, display_columns]
+
+
 def _empty_snapshot() -> AgentMessagingSnapshot:
     return AgentMessagingSnapshot()
 
@@ -106,18 +169,20 @@ def calculate_agent_messaging_snapshot(
         return _empty_snapshot()
 
     work = agent_work.copy()
-    work["User: Full Name"] = work["User: Full Name"].astype(str).str.strip()
+    work["User: Full Name"] = work["User: Full Name"].astype("string").str.strip()
     work["_Agent Key"] = work["User: Full Name"].str.casefold()
     work["Messaging Session Name"] = work["Messaging Session Name"].astype(str).str.strip()
     work["Accept Date"] = pd.to_datetime(
         work["Accept Date"], format="mixed", dayfirst=True, errors="coerce"
     )
-    work["Handle Time"] = pd.to_numeric(work["Handle Time"], errors="coerce")
-    work["Speed To Answer"] = pd.to_numeric(work["Speed To Answer"], errors="coerce")
+    work["Handle Time"] = _finite_numeric(work["Handle Time"])
+    work["Speed To Answer"] = _finite_numeric(work["Speed To Answer"])
 
     human = work[
         work["Accept Date"].notna()
         & work["Messaging Session Name"].ne("")
+        & work["_Agent Key"].notna()
+        & work["_Agent Key"].ne("")
         & work["_Agent Key"].ne("automated process")
     ].copy()
     if human.empty:
@@ -144,6 +209,9 @@ def calculate_agent_messaging_snapshot(
     included_sessions = set(per_session["Messaging Session Name"])
     selected_in_period = selected[selected["Messaging Session Name"].isin(included_sessions)]
     speed_values = selected_in_period["Speed To Answer"].dropna()
+    speed_by_session = selected_in_period.groupby("Messaging Session Name")[
+        "Speed To Answer"
+    ].median()
 
     human_counts = human.groupby("Messaging Session Name")["_Agent Key"].nunique()
     per_session["Transferred"] = per_session["Messaging Session Name"].map(human_counts).fillna(0) > 1
@@ -165,8 +233,8 @@ def calculate_agent_messaging_snapshot(
     if metrics_long is not None and not metrics_long.empty and required_metrics.issubset(metrics_long.columns):
         metrics = metrics_long.copy()
         metrics["Messaging Session Name"] = metrics["Messaging Session Name"].astype(str).str.strip()
-        metrics["Messaging Session Metric Value"] = pd.to_numeric(
-            metrics["Messaging Session Metric Value"], errors="coerce"
+        metrics["Messaging Session Metric Value"] = _finite_numeric(
+            metrics["Messaging Session Metric Value"]
         )
         first_response = metrics[
             metrics["Messaging Session Metric Type"].astype(str).str.strip()
@@ -192,6 +260,46 @@ def calculate_agent_messaging_snapshot(
     handle_values = per_session["Agent_Handle_Secs"].dropna()
     response_values = response_by_session
     measurable = int(len(response_values))
+    review_rows = []
+    for row in per_session.itertuples(index=False):
+        session_name = row[0]
+        accepted_at = row[1]
+        handle_seconds = row[2]
+        transferred = bool(row[3])
+        speed_seconds = speed_by_session.get(session_name)
+        first_response_seconds = response_by_session.get(session_name)
+        reasons = []
+        if pd.notna(first_response_seconds) and first_response_seconds > 60:
+            reasons.append("First response >60s")
+        if pd.notna(speed_seconds) and speed_seconds > 60:
+            reasons.append("Speed to answer >60s")
+        if pd.notna(handle_seconds) and handle_seconds >= 15 * 60:
+            reasons.append("Handling time ≥15m")
+        if transferred:
+            reasons.append("Transfer involvement")
+        if reasons:
+            review_rows.append(
+                {
+                    "Accepted At": accepted_at,
+                    "Messaging Session": session_name,
+                    "Handle Time (s)": handle_seconds,
+                    "Speed To Answer (s)": speed_seconds,
+                    "First Response (s)": first_response_seconds,
+                    "Review Reason": "; ".join(reasons),
+                }
+            )
+    review_sessions = pd.DataFrame(
+        review_rows,
+        columns=[
+            "Accepted At",
+            "Messaging Session",
+            "Handle Time (s)",
+            "Speed To Answer (s)",
+            "First Response (s)",
+            "Review Reason",
+        ],
+    ).sort_values("Accepted At").reset_index(drop=True)
+
     daily_rows = []
     for day, day_sessions in per_session.groupby(per_session["Agent_Accept"].dt.date):
         session_names = set(day_sessions["Messaging Session Name"])
@@ -238,4 +346,5 @@ def calculate_agent_messaging_snapshot(
         ),
         measurable_responses=measurable,
         daily=daily,
+        review_sessions=review_sessions,
     )
