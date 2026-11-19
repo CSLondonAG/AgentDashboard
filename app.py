@@ -1031,17 +1031,21 @@ else:
     # Messaging Sessions Requiring Review
     # =========================================================
     st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
-    st.markdown("### Messaging Sessions Requiring Review")
-
-    if messaging_snapshot.review_sessions.empty:
-        st.info("No Messaging sessions requiring review in the selected range.")
-    else:
-        messaging_review_display = format_messaging_review_sessions(messaging_snapshot.review_sessions)
-        st.dataframe(
-            messaging_review_display,
-            width="stretch",
-            hide_index=True,
-        )
+    review_count = len(messaging_snapshot.review_sessions)
+    with st.expander(
+        f"Messaging Sessions Requiring Review ({review_count})", expanded=False
+    ):
+        if messaging_snapshot.review_sessions.empty:
+            st.info("No Messaging sessions requiring review in the selected range.")
+        else:
+            messaging_review_display = format_messaging_review_sessions(
+                messaging_snapshot.review_sessions
+            )
+            st.dataframe(
+                messaging_review_display,
+                width="stretch",
+                hide_index=True,
+            )
 
     st.markdown('<hr class="section-divider">', unsafe_allow_html=True)
     st.markdown("### Daily Overview")
