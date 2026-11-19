@@ -6,6 +6,7 @@ from typing import List, Optional, Tuple
 
 from messaging_kpis import (
     build_agent_messaging_cards,
+    build_agent_messaging_summary_tile,
     calculate_agent_messaging_snapshot,
 )
 
@@ -763,10 +764,8 @@ else:
     chat_items = df_range_items[df_range_items["Service Channel: Developer Name"] == "sfdc_liveagent"]
     email_items = df_range_items[df_range_items["Service Channel: Developer Name"] == "casesChannel"]
 
-    aht_chat = chat_items["Duration"].mean() if not chat_items.empty else None    # seconds
     aht_email = email_items["Duration"].mean() if not email_items.empty else None
 
-    num_chat_items = len(chat_items)
     num_email_items = len(email_items)
 
     # =========================================================
@@ -840,18 +839,19 @@ else:
         if overall_available_seconds else None
     )
 
-    col_aht1, col_aht2 = st.columns(2)
-    with col_aht1:
+    messaging_summary_tile = build_agent_messaging_summary_tile(messaging_snapshot)
+    col_messaging, col_email = st.columns(2)
+    with col_messaging:
         st.markdown(f"""
             <div class="metric-container">
-                <div class="metric-title">AHT Chat (mm:ss)</div>
-                <div class="metric-value-accent">{format_seconds_to_mm_ss(aht_chat) if aht_chat is not None else "–"}</div>
-                <div class="metric-title" style="margin-top:12px;">Chat Items</div>
-                <div class="metric-value">{num_chat_items}</div>
+                <div class="metric-title">{messaging_summary_tile.primary_label}</div>
+                <div class="metric-value-accent">{messaging_summary_tile.primary_value}</div>
+                <div class="metric-title" style="margin-top:12px;">{messaging_summary_tile.secondary_label}</div>
+                <div class="metric-value">{messaging_summary_tile.secondary_value}</div>
             </div>
         """, unsafe_allow_html=True)
 
-    with col_aht2:
+    with col_email:
         st.markdown(f"""
             <div class="metric-container">
                 <div class="metric-title">AHT Email (mm:ss)</div>
