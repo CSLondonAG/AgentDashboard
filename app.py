@@ -1,5 +1,6 @@
 import streamlit as st
 import pandas as pd
+import streamlit.components.v1 as components
 from pandas.errors import EmptyDataError
 from datetime import datetime, timedelta, time as dtime, date as date_type
 from typing import List, Optional, Tuple
@@ -343,8 +344,55 @@ st.markdown("""
         text-align: center;
         box-shadow: var(--glass-shadow);
     }
+
+    /* ── PRINT: portrait A4, fit to one page ─────────────── */
+    @media print {
+        @page { size: A4 portrait; margin: 8mm; }
+        [data-testid="stSidebar"],
+        [data-testid="stHeader"],
+        [data-testid="stToolbar"],
+        [data-testid="stSidebarCollapsedControl"],
+        .print-hide { display: none !important; }
+
+        html, body, .stApp,
+        [data-testid="stAppViewContainer"],
+        [data-testid="stMain"] {
+            height: auto !important;
+            overflow: visible !important;
+        }
+        .stApp {
+            background-attachment: scroll !important;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+        }
+        .stApp::after { display: none; }
+        .block-container { max-width: 100% !important; padding: 0 !important; }
+        .metric-container, .metric-container-warning, .goat-hero { break-inside: avoid; }
+    }
     </style>
 """, unsafe_allow_html=True)
+
+# Print: scale the page to fit a single A4 portrait sheet just before printing.
+components.html("""
+<script>
+const win = window.parent, doc = win.document;
+if (!win.__goatPrintFit) {
+  win.__goatPrintFit = true;
+  const PAGE_W = (210 - 16) / 25.4 * 96;   // A4 width minus margins, CSS px
+  const PAGE_H = (297 - 16) / 25.4 * 96;
+  const MIN_SCALE = 0.45;                  // below this, spill onto a 2nd page
+  const target = () => doc.querySelector('[data-testid="stMain"] .block-container');
+  win.addEventListener('beforeprint', () => {
+    const el = target(); if (!el) return;
+    el.style.zoom = 1;
+    el.style.zoom = Math.max(MIN_SCALE,
+      Math.min(1, PAGE_W / el.scrollWidth, PAGE_H / el.scrollHeight));
+  });
+  win.addEventListener('afterprint', () => { const el = target(); if (el) el.style.zoom = ''; });
+}
+</script>
+""", height=0)
+
 
 
 # -----------------------------
@@ -1247,13 +1295,16 @@ else:
         </div>
     """, unsafe_allow_html=True)
 
-    st.markdown("#### Lateness Incidents")
     items_html = "\n".join([
         f'<li class="incident-item"><span class="incident-date">{inc.split("**: ")[0].replace("- **", "")}</span>'
         f'<span class="incident-badge">{inc.split("**: ")[1]}</span></li>'
         for inc in lateness_incidents
     ])
-    st.markdown(f'<ul class="incident-list">{items_html}</ul>', unsafe_allow_html=True)
+    st.markdown(
+        f'<div class="print-hide"><h4>Lateness Incidents</h4>'
+        f'<ul class="incident-list">{items_html}</ul></div>',
+        unsafe_allow_html=True,
+    )
 
 # =========================================================
 # Absence – Last 90 Days (from end of selected range)
@@ -1314,19 +1365,25 @@ else:
         """, unsafe_allow_html=True)
 
     if absent_days:
-        st.markdown("#### Absence Dates")
         items_html = "\n".join([
             f'<li class="incident-item"><span class="incident-date">{ad}</span>'
             f'<span class="incident-badge">Absent</span></li>'
             for ad in absent_days
         ])
-        st.markdown(f'<ul class="incident-list">{items_html}</ul>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="print-hide"><h4>Absence Dates</h4>'
+            f'<ul class="incident-list">{items_html}</ul></div>',
+            unsafe_allow_html=True,
+        )
 
     if sick_days:
-        st.markdown("#### Sickness Dates")
         items_html = "\n".join([
             f'<li class="incident-item"><span class="incident-date">{sd}</span>'
             f'<span class="incident-badge">Sick</span></li>'
             for sd in sick_days
         ])
-        st.markdown(f'<ul class="incident-list">{items_html}</ul>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="print-hide"><h4>Sickness Dates</h4>'
+            f'<ul class="incident-list">{items_html}</ul></div>',
+            unsafe_allow_html=True,
+        )
